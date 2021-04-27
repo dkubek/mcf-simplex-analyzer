@@ -14,11 +14,19 @@ let
     overrides = poetry2nix.overrides.withDefaults customOverrides;
   };
 
+ customVim = pkgs.vimHugeX.override {
+   python = pkgs.python3.withPackages(ps: [
+     ps.python-language-server
+     ps.pyls-mypy ps.pyls-isort ps.pyls-black ps.jedi
+   ]);
+ };
+
   mcf-simplex-analyzer = import ./default.nix {};
 in
   pkgs.mkShell {
     buildInputs = [
       pkgs.poetry
       develEnv
+      customVim
     ];
   }
