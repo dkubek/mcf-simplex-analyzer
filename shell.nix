@@ -18,6 +18,8 @@ let
    python = pkgs.python3.withPackages(ps: [
      ps.python-language-server
      ps.pyls-mypy ps.pyls-isort ps.pyls-black ps.jedi
+     ps.pylint
+     ps.flake8
    ]);
  };
 
