@@ -98,7 +98,7 @@ def load_instances(
         assert mut_file.exists()
         assert arc_file.exists()
 
-    intanceinfo = read_nod(nod_file)
+    instanceinfo = read_nod(nod_file)
     arcinfo = read_arc(arc_file, instance_format)
     supinfo = read_sup(sup_file, instance_format)
     mutinfo = read_mut(mut_file, instance_format)

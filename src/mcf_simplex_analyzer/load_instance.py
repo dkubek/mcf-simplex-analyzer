@@ -5,6 +5,7 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
+from typing import Any, MutableMapping, Sequence
 
 import numpy as np
 
@@ -19,13 +20,10 @@ MUT_FIELD_TYPES = {
 }
 
 ARC_FIELD_TYPES = {
-    "arcname": np.uint32,
     "fromnode": np.int32,
     "tonode": np.int32,
     "commodity": np.int32,
     "cost": Fraction,
-    "origin": np.int32,
-    "destination": np.int32,
     "individual_capacity": Fraction,
     "mutual_ptr": np.uint32,
 }
@@ -49,7 +47,47 @@ class InstanceInfo:
     bundled_links_no: int
 
 
-def read_nod(nod_file):
+@dataclass
+class SupplyInfo:
+    """ Inforormation about supply """
+
+    origin: np.ndarray
+    destination: np.ndarray
+    commodity: np.ndarray
+    flow: FractionArray
+
+
+@dataclass
+class ArcInfo:
+    """ Information about arcs """
+
+    fromnode: np.ndarray
+    tonode: np.ndarray
+    commodity: np.ndarray
+    cost: FractionArray
+    individual_capacity: FractionArray
+    mutual_ptr: np.ndarray
+
+
+@dataclass
+class MutualInfo:
+    """ Information about mutual cappacities """
+
+    capacity: FractionArray
+    mutual_ptr: np.ndarray
+
+
+@dataclass
+class Instance:
+    """ Instance """
+
+    info: InstanceInfo
+    arcs: ArcInfo
+    mutual: MutualInfo
+    supply: SupplyInfo
+
+
+def read_nod(nod_file: Path) -> InstanceInfo:
     """" Read a nod_file """
 
     logger = logging.getLogger(__name__)
@@ -79,14 +117,16 @@ def read_nod(nod_file):
     )
 
 
-def _to_array_types(data, types):
+def _to_array_types(
+    data: MutableMapping[str, Any], types: Sequence[str]
+) -> MutableMapping[str, Any]:
     ans = {}
 
     for field in data:
         dtype = types[field]
 
         arr = None
-        if isinstance(dtype(), Fraction):
+        if dtype is Fraction:
             numerators = np.fromiter(
                 map(lambda frac: frac.numerator, data[field]), dtype=np.int64
             )
@@ -103,20 +143,27 @@ def _to_array_types(data, types):
     return ans
 
 
-def _read_file(file, instance_format, types, fields):
+def _read_file(
+    file: Path,
+    types: MutableMapping[str, Any],
+    fields: Sequence[str],
+) -> MutableMapping[str, Any]:
+    """ Read a file with a template. '_' means ignore """
+
     data = defaultdict(list)
     with open(file, "r") as fin:
         for line in fin:
             for field, value in zip(fields, line.split()):
+                if field == "_":
+                    continue
+
                 data[field].append(types[field](value))
 
     return _to_array_types(data, types)
 
 
-def read_arc(arc_file, instance_format):
+def read_arc(arc_file: Path, instance_format: str) -> ArcInfo:
     """ Read arc file """
-
-    # TODO: Use data from nod file to instantatie?
 
     logger = logging.getLogger(__name__)
     logger.debug(
@@ -126,7 +173,7 @@ def read_arc(arc_file, instance_format):
     fields = None
     if instance_format in ["mnetgen", "pds", "planar", "grid"]:
         fields = (
-            "arcname",
+            "_",
             "fromnode",
             "tonode",
             "commodity",
@@ -141,17 +188,19 @@ def read_arc(arc_file, instance_format):
             "commodity",
             "cost",
             "individual_capacity",
-            "origin",
-            "destination",
+            "_",
+            "_",
             "mutual_ptr",
         )
     else:
         raise NotImplementedError("read_arc: Not implemented!")
 
-    return _read_file(arc_file, instance_format, ARC_FIELD_TYPES, fields)
+    data = _read_file(arc_file, ARC_FIELD_TYPES, fields)
+
+    return ArcInfo(**data)
 
 
-def read_sup(sup_file, instance_format):
+def read_sup(sup_file: Path, instance_format: str):
     """ Read sup file """
 
     logger = logging.getLogger(__name__)
@@ -167,10 +216,32 @@ def read_sup(sup_file, instance_format):
     else:
         raise NotImplementedError("read_sup: Not implemented!")
 
-    return _read_file(sup_file, instance_format, SUP_FIELD_TYPES, fields)
+    data = _read_file(sup_file, SUP_FIELD_TYPES, fields)
+
+    # Split the node field into origin/destination by inspecting the flow
+    if instance_format in ["mnetgen", "pds", "planar", "grid"]:
+        nums = data["flow"].numerators
+        sign = np.sign(nums)
+        origin = -np.ones_like(data["node"])
+        destination = -np.ones_like(data["node"])
+
+        mask = sign < 0
+        destination[mask] = data["node"][mask]
+
+        mask = sign > 0
+        origin[mask] = data["node"][mask]
+
+        data["origin"] = origin
+        data["destination"] = destination
+
+        nums *= sign
+
+        del data["node"]
+
+    return SupplyInfo(**data)
 
 
-def read_mut(mut_file, instance_format):
+def read_mut(mut_file: Path, instance_format: str):
     """ Read mut file """
 
     logger = logging.getLogger(__name__)
@@ -182,4 +253,6 @@ def read_mut(mut_file, instance_format):
     if instance_format not in ["mnetgen", "pds", "jlf", "planar", "grid"]:
         raise NotImplementedError("read_arc: Not implemented!")
 
-    return _read_file(mut_file, instance_format, MUT_FIELD_TYPES, fields)
+    data = _read_file(mut_file, MUT_FIELD_TYPES, fields)
+
+    return MutualInfo(**data)
