@@ -102,3 +102,8 @@ def load_instances(
     arcinfo = read_arc(arc_file, instance_format)
     supinfo = read_sup(sup_file, instance_format)
     mutinfo = read_mut(mut_file, instance_format)
+
+    logger.debug("%s", instanceinfo)
+    logger.debug("%s", arcinfo)
+    logger.debug("%s", supinfo)
+    logger.debug("%s", mutinfo)
