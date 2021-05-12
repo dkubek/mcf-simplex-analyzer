@@ -5,8 +5,7 @@ from pathlib import Path
 
 import click
 
-from .load_instance import (SUPPORTED_INSTANCES, read_arc, read_mut, read_nod,
-                            read_sup)
+from .load_instance import SUPPORTED_INSTANCES, load_instance
 
 
 def initialize_logging(log_level=1):
@@ -49,16 +48,16 @@ def debug(verbose):
     help="Path to nod file.",
 )
 @click.option(
-    "-s",
-    "--sup-file",
-    type=click.Path(exists=True, file_okay=True),
-    help="Path to sup file.",
-)
-@click.option(
     "-a",
     "--arc-file",
     type=click.Path(exists=True, file_okay=True),
     help="Path to arc file.",
+)
+@click.option(
+    "-s",
+    "--sup-file",
+    type=click.Path(exists=True, file_okay=True),
+    help="Path to sup file.",
 )
 @click.option(
     "-m",
@@ -66,9 +65,7 @@ def debug(verbose):
     type=click.Path(exists=True, file_okay=True),
     help="Path to mut file.",
 )
-def load_instances(
-    instance_format, basename, nod_file, sup_file, arc_file, mut_file
-):
+def load(instance_format, basename, nod_file, arc_file, sup_file, mut_file):
     logger = logging.getLogger(__name__)
     logger.debug(
         "Instance_format=%s, basename=%s, nod_file=%s, "
@@ -89,21 +86,17 @@ def load_instances(
 
     if basename:
         nod_file = Path(basename + ".nod")
+        arc_file = Path(basename + ".arc")
         sup_file = Path(basename + ".sup")
         mut_file = Path(basename + ".mut")
-        arc_file = Path(basename + ".arc")
 
         assert nod_file.exists()
+        assert arc_file.exists()
         assert sup_file.exists()
         assert mut_file.exists()
-        assert arc_file.exists()
 
-    instanceinfo = read_nod(nod_file)
-    arcinfo = read_arc(arc_file, instance_format)
-    supinfo = read_sup(sup_file, instance_format)
-    mutinfo = read_mut(mut_file, instance_format)
+    instance = load_instance(
+        instance_format, nod_file, arc_file, sup_file, mut_file
+    )
 
-    logger.debug("%s", instanceinfo)
-    logger.debug("%s", arcinfo)
-    logger.debug("%s", supinfo)
-    logger.debug("%s", mutinfo)
+    logger.debug("Loaded instance=%s", instance)

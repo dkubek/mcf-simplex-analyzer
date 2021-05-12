@@ -256,3 +256,22 @@ def read_mut(mut_file: Path, instance_format: str):
     data = _read_file(mut_file, MUT_FIELD_TYPES, fields)
 
     return MutualInfo(**data)
+
+
+def load_instance(
+    instance_format: str,
+    nod_file: Path,
+    arc_file: Path,
+    sup_file: Path,
+    mut_file: Path,
+) -> Instance:
+    """ Load given instance """
+
+    instanceinfo = read_nod(nod_file)
+    arcinfo = read_arc(arc_file, instance_format)
+    supinfo = read_sup(sup_file, instance_format)
+    mutinfo = read_mut(mut_file, instance_format)
+
+    return Instance(
+        info=instanceinfo, arcs=arcinfo, supply=supinfo, mutual=mutinfo
+    )
