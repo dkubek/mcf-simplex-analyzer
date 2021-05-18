@@ -9,7 +9,34 @@ from typing import Any, MutableMapping, Sequence
 
 import numpy as np
 
-FractionArray = namedtuple("FractionArray", ("numerators", "denominator"))
+# FractionArray = namedtuple("FractionArray", ("numerators", "denominator"))
+
+
+@dataclass
+class FractionArray:
+    """ Array of rational numbers. """
+
+    numerators: np.ndarray
+    denominators: np.ndarray
+
+    def __len__(self):
+        return len(self.numerators)
+
+    def __getitem__(self, key):
+        return Fraction(self.numerators[key], self.denominators[key])
+
+    def __setitem__(self, key, value):
+        num, denom = value
+        self.numerators[key] = num
+        self.denominators[key] = denom
+
+    def __iter__(self):
+        return iter(
+            map(
+                lambda p: Fraction(*p), zip(self.numerators, self.denominators)
+            )
+        )
+
 
 SUPPORTED_INSTANCES = ("mnetgen", "pds", "planar", "grid", "jlf")
 """ Supported instance formats """
@@ -37,6 +64,7 @@ SUP_FIELD_TYPES = {
 }
 
 
+# TODO: report real number of edges
 @dataclass
 class InstanceInfo:
     """ Information about the instance. """
@@ -56,6 +84,30 @@ class SupplyInfo:
     commodity: np.ndarray
     flow: FractionArray
 
+    def __len__(self):
+        return len(self.origin)
+
+    def __getitem__(self, key):
+        return (
+            self.origin[key],
+            self.destination[key],
+            self.commodity[key],
+            self.flow[key],
+        )
+
+    def __iter__(self):
+        return iter(
+            zip(
+                self.origin,
+                self.destination,
+                self.commodity,
+                self.flow,
+            )
+        )
+
+    def __reversed__(self):
+        return reversed(self.__iter__())
+
 
 @dataclass
 class ArcInfo:
@@ -68,7 +120,36 @@ class ArcInfo:
     individual_capacity: FractionArray
     mutual_ptr: np.ndarray
 
+    def __len__(self):
+        return len(self.fromnode)
 
+    def __getitem__(self, key):
+        return (
+            self.fromnode[key],
+            self.tonode[key],
+            self.commodity[key],
+            self.cost[key],
+            self.individual_capacity[key],
+            self.mutual_ptr[key],
+        )
+
+    def __iter__(self):
+        return iter(
+            zip(
+                self.fromnode,
+                self.tonode,
+                self.commodity,
+                self.cost,
+                self.individual_capacity,
+                self.mutual_ptr,
+            )
+        )
+
+    def __reversed__(self):
+        return reversed(self.__iter__())
+
+
+# TODO: Convert to a dictionary
 @dataclass
 class MutualInfo:
     """ Information about mutual cappacities """
@@ -134,7 +215,9 @@ def _to_array_types(
                 map(lambda frac: frac.denominator, data[field]), dtype=np.int64
             )
 
-            arr = FractionArray(numerators, denominators)
+            arr = FractionArray(
+                numerators=numerators, denominators=denominators
+            )
         else:
             arr = np.array(data[field], dtype=dtype)
 
