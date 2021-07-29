@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from .load_instance import SUPPORTED_INSTANCES, load_instance
+from .formulate import formulate_concurrent_flow_problem
 
 
 def initialize_logging(log_level=1):
@@ -98,5 +99,7 @@ def load(instance_format, basename, nod_file, arc_file, sup_file, mut_file):
     instance = load_instance(
         instance_format, nod_file, arc_file, sup_file, mut_file
     )
+    flow = formulate_concurrent_flow_problem(instance)
 
     logger.debug("Loaded instance=%s", instance)
+    logger.debug("Summed flow=%s", flow)

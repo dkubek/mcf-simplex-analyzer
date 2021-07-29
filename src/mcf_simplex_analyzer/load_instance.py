@@ -1,15 +1,18 @@
-""" Load a MCF instance """
+"""
+Load a MCF instance
+
+TODO:
+    - Add option to specifie the precision for input floating point values
+"""
 
 import logging
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, MutableMapping, Sequence
+from typing import Any, MutableMapping, Sequence, Dict
 
 import numpy as np
-
-# FractionArray = namedtuple("FractionArray", ("numerators", "denominator"))
 
 
 @dataclass
@@ -64,7 +67,8 @@ SUP_FIELD_TYPES = {
 }
 
 
-# TODO: report real number of edges
+# TODO: report real number of edges, the links_no currently denotes the number
+#       edges before being merged together
 @dataclass
 class InstanceInfo:
     """ Information about the instance. """
@@ -149,13 +153,11 @@ class ArcInfo:
         return reversed(self.__iter__())
 
 
-# TODO: Convert to a dictionary
 @dataclass
 class MutualInfo:
     """ Information about mutual cappacities """
 
-    capacity: FractionArray
-    mutual_ptr: np.ndarray
+    mapping: Dict[int, Fraction]
 
 
 @dataclass
@@ -337,8 +339,9 @@ def read_mut(mut_file: Path, instance_format: str):
         raise NotImplementedError("read_arc: Not implemented!")
 
     data = _read_file(mut_file, MUT_FIELD_TYPES, fields)
+    mutual_mapping = dict(zip(data["mutual_ptr"], data["capacity"]))
 
-    return MutualInfo(**data)
+    return MutualInfo(mapping=mutual_mapping)
 
 
 def load_instance(
