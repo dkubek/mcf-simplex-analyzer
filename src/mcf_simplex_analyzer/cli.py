@@ -81,7 +81,7 @@ def load(instance_format, basename, nod_file, arc_file, sup_file, mut_file):
 
     if basename is None and nod_file is None:
         click.echo(
-            click.style("No instance has been provided! Exitting.", fg="red")
+            click.style("No instance has been provided! Exiting.", fg="red")
         )
         sys.exit(1)
 

@@ -2,7 +2,7 @@
 Load a MCF instance
 
 TODO:
-    - Add option to specifie the precision for input floating point values
+    - Add option to specify the precision for input floating point values
 """
 
 import logging
