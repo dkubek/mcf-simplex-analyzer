@@ -19,24 +19,27 @@ import numpy as np
 class FractionArray:
     """ Array of rational numbers. """
 
-    numerators: np.ndarray
-    denominators: np.ndarray
+    numerator: np.ndarray
+    denominator: np.ndarray
 
     def __len__(self):
-        return len(self.numerators)
+        return len(self.numerator)
 
     def __getitem__(self, key):
-        return Fraction(self.numerators[key], self.denominators[key])
+        return Fraction(self.numerator[key], self.denominator[key])
 
     def __setitem__(self, key, value):
+        if isinstance(value, Fraction):
+            value = value.numerator, value.denominator
+
         num, denom = value
-        self.numerators[key] = num
-        self.denominators[key] = denom
+        self.numerator[key] = num
+        self.denominator[key] = denom
 
     def __iter__(self):
         return iter(
             map(
-                lambda p: Fraction(*p), zip(self.numerators, self.denominators)
+                lambda p: Fraction(*p), zip(self.numerator, self.denominator)
             )
         )
 
@@ -305,7 +308,7 @@ def read_sup(sup_file: Path, instance_format: str):
 
     # Split the node field into origin/destination by inspecting the flow
     if instance_format in ["mnetgen", "pds", "planar", "grid"]:
-        nums = data["flow"].numerators
+        nums = data["flow"].numerator
         sign = np.sign(nums)
         origin = -np.ones_like(data["node"])
         destination = -np.ones_like(data["node"])
