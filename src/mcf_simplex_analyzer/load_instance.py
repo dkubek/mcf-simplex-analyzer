@@ -6,42 +6,14 @@ TODO:
 """
 
 import logging
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, MutableMapping, Sequence, Dict
 
 import numpy as np
-
-
-@dataclass
-class FractionArray:
-    """ Array of rational numbers. """
-
-    numerator: np.ndarray
-    denominator: np.ndarray
-
-    def __len__(self):
-        return len(self.numerator)
-
-    def __getitem__(self, key):
-        return Fraction(self.numerator[key], self.denominator[key])
-
-    def __setitem__(self, key, value):
-        if isinstance(value, Fraction):
-            value = value.numerator, value.denominator
-
-        num, denom = value
-        self.numerator[key] = num
-        self.denominator[key] = denom
-
-    def __iter__(self):
-        return iter(
-            map(
-                lambda p: Fraction(*p), zip(self.numerator, self.denominator)
-            )
-        )
+from mcf_simplex_analyzer.fractionarray import FractionArray
 
 
 SUPPORTED_INSTANCES = ("mnetgen", "pds", "planar", "grid", "jlf")
