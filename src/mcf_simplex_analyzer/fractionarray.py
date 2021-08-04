@@ -1,3 +1,14 @@
+"""
+FractionArray is an array of fractions.
+
+TODO:
+    - Clearly define types and their interactions
+    - Refactor initialization
+    - Refactor operation dispatch for operations
+    - Rename ``regular`` -> ``integral``
+
+"""
+
 from fractions import Fraction
 
 import operator
@@ -32,27 +43,38 @@ class FractionArray:
         if is_integral_array(x):
             return cls(x, np.ones_like(x))
 
+        # Test input is iterable
         try:
-            numerator, denominator = [], []
-            for val in x:
-                if isinstance(val, Fraction):
-                    numerator.append(val.numerator)
-                    denominator.append(val.denominator)
-                    continue
-
-                if np.issubdtype(type(val), np.integer):
-                    numerator.append(val)
-                    denominator.append(1)
-                    continue
-
-                raise TypeError
-
-            return cls(numerator, denominator)
+            iter(x)
         except TypeError:
             raise ValueError("Invalid input: {}".format(type(x)))
 
+        original_shape = np.shape(x)
+        size = np.size(x)
+
+        numerator, denominator = np.empty(size, dtype=int), np.empty(
+            size, dtype=int
+        )
+        for i, val in enumerate(np.ravel(x)):
+            if isinstance(val, Fraction):
+                numerator[i] = val.numerator
+                denominator[i] = val.denominator
+                continue
+
+            if np.issubdtype(type(val), np.integer):
+                numerator[i] = val
+                denominator[i] = 1
+                continue
+
+            raise ValueError("Invalid value: {}".format(val))
+
+        return cls(
+            numerator.reshape(original_shape),
+            denominator.reshape(original_shape),
+        )
+
     def __init__(
-        self, numerator, denominator, normalize=True, dtype=np.integer
+        self, numerator, denominator, _normalize=True, dtype=np.integer
     ):
         numerator = to_array(numerator, dtype=dtype)
         denominator = to_array(denominator, dtype=dtype)
@@ -66,9 +88,11 @@ class FractionArray:
 
         self.numerator = numerator
         self.denominator = denominator
-        self.shape = self.numerator.shape
 
-        if normalize:
+        self.shape = self.numerator.shape
+        self.size = np.product(self.shape)
+
+        if _normalize:
             self.normalize()
 
     def normalize(self):
@@ -81,15 +105,36 @@ class FractionArray:
 
         self.numerator[neg_ans] *= -1
 
+    def minimum(self):
+        raise NotImplemented
+
+    def maximum(self):
+        raise NotImplemented
+
+    def argmin(self):
+        # TODO: This can overflow! Find a safer method.
+        #       For example first convert to floats.
+        lcm = np.lcm.reduce(self.denominator)
+        return np.argmin((lcm // self.denominator) * self.numerator)
+
+    def argmax(self):
+        # TODO: This can overflow! Find a safer method.
+        #       For example first convert to floats.
+        lcm = np.lcm.reduce(self.denominator)
+        return np.argmax((lcm // self.denominator) * self.numerator)
+
     def reshape(self, *args, **kwargs):
         return FractionArray(
             self.numerator.reshape(*args, **kwargs),
             self.denominator.reshape(*args, **kwargs),
         )
 
+    def resize(self, shape):
+        raise NotImplementedError("Resizing not supported.")
+
     def copy(self):
         return FractionArray(
-            self.numerator.copy(), self.denominator.copy(), normalize=False
+            self.numerator.copy(), self.denominator.copy(), _normalize=False
         )
 
     def __abs__(self):
@@ -135,7 +180,7 @@ class FractionArray:
         )
 
     def __add__(self, other):  # self + other
-        if other == 0:
+        if isintlike(other) and other == 0:
             return self.copy()
 
         if isinstance(other, (Fraction, FractionArray)):
@@ -162,7 +207,7 @@ class FractionArray:
         )
 
     def __sub__(self, other):  # self - other
-        if other == 0:
+        if isintlike(other) and other == 0:
             return self.copy()
 
         if isinstance(other, (Fraction, FractionArray)):
@@ -186,7 +231,7 @@ class FractionArray:
         )
 
     def __rsub__(self, other):  # other - self
-        if other == 0:
+        if isintlike(other) and other == 0:
             return -self.copy()
 
         if isinstance(other, (Fraction, FractionArray)):
@@ -199,7 +244,7 @@ class FractionArray:
 
     def __neg__(self):
         return FractionArray(
-            -self.numerator.copy(), self.denominator.copy(), normalize=False
+            -self.numerator.copy(), self.denominator.copy(), _normalize=False
         )
 
     def _mul_fractional(self, f):
@@ -214,7 +259,7 @@ class FractionArray:
         if isintlike(other):
             return self._mul_regular(other)
 
-        other = np.asanyarray(other)
+        # other = np.asanyarray(other)
 
         if is_integral_array(other):
             return self._mul_regular(other)
@@ -225,7 +270,7 @@ class FractionArray:
         raise ValueError("Cannot multiply: {}".format(other.dtype))
 
     def __rmul__(self, other):
-        self.__mul__(other)
+        return self.__mul__(other)
 
     def _div_fractional(self, f):
         return FractionArray(
@@ -250,6 +295,115 @@ class FractionArray:
     def __truediv__(self, other):
         return self.__div__(other)
 
+    def _iadd_fractional(self, f):
+        self.numerator = (
+            self.numerator * f.denominator + self.denominator * f.numerator
+        )
+        self.denominator = self.denominator * f.denominator
+
+        self.normalize()
+
+    def _iadd_regular(self, x):
+        self.numerator = self.numerator + x * self.denominator
+
+        self.normalize()
+
+    def __iadd__(self, other):
+        if isintlike(other) and other == 0:
+            return self
+
+        if isinstance(other, (Fraction, FractionArray)):
+            self._iadd_fractional(other)
+            return self
+
+        if is_integral_array(other) or np.issubdtype(type(other), np.integer):
+            self._iadd_regular(other)
+            return self
+
+        raise ValueError("Cannot add in-place: {}".format(other.dtype))
+
+    def _isub_fractional(self, f):
+        self.numerator = (
+            self.numerator * f.denominator - self.denominator * f.numerator
+        )
+        self.denominator = self.denominator * f.denominator
+
+        self.normalize()
+
+    def _isub_regular(self, x):
+        self.numerator = self.numerator - x * self.denominator
+
+        self.normalize()
+
+    def __isub__(self, other):
+        if isintlike(other) and other == 0:
+            return self
+
+        if isinstance(other, (Fraction, FractionArray)):
+            self._isub_fractional(other)
+            return self
+
+        if is_integral_array(other) or np.issubdtype(type(other), np.integer):
+            self._isub_regular(other)
+            return self
+
+        raise ValueError("Cannot subtract in-place: {}".format(type(other)))
+
+    def _imul_fractional(self, f):
+        self.numerator = self.numerator * f.numerator
+        self.denominator = self.denominator * f.denominator
+
+        self.normalize()
+
+    def _imul_regular(self, x):
+        new_numerator = x * self.numerator
+        self.numerator = new_numerator
+
+        self.normalize()
+
+    def __imul__(self, other):
+        if isintlike(other):
+            self._imul_regular(other)
+            return self
+
+        # other = np.asanyarray(other)
+
+        if is_integral_array(other):
+            self._imul_regular(other)
+            return self
+
+        if isinstance(other, (Fraction, FractionArray)):
+            self._imul_fractional(other)
+            return self
+
+        raise ValueError("Cannot multiply in-place: {}".format(other.dtype))
+
+    def _idiv_fractional(self, f):
+        self.numerator = self.numerator * f.denominator
+        self.denominator = self.denominator * f.numerator
+
+        self.normalize()
+
+    def _idiv_regular(self, x):
+        self.numerator = self.numerator
+        self.denominator = self.denominator * x
+
+        self.normalize()
+
+    def __itruediv__(self, other):
+        if is_integral_array(other) or isintlike(other):
+            self._idiv_regular(other)
+            return self
+
+        if isinstance(other, (Fraction, FractionArray)):
+            self._idiv_fractional(other)
+            return self
+
+        raise ValueError("Cannot divide in-place: {}".format(other.dtype))
+
+    def __idiv__(self, other):
+        return self.__itruediv__(other)
+
     def __len__(self):
         return len(self.numerator)
 
@@ -258,13 +412,11 @@ class FractionArray:
         denominator = self.denominator[key]
 
         if np.shape(numerator) == ():
-            return Fraction(numerator, denominator)
+            return Fraction(numerator, denominator, _normalize=False)
 
-        return FractionArray(numerator, denominator)
+        return FractionArray(numerator, denominator, _normalize=False)
 
     def __setitem__(self, key, value):
-        numerator, denominator = None, None
-
         # TODO: Deprecated tuple, remove
         if isinstance(value, tuple):
             numerator, denominator = value
