@@ -6,6 +6,7 @@ TODO:
     - Refactor initialization
     - Refactor operation dispatch for operations
     - Rename ``regular`` -> ``integral``
+    - Refactor argmin, argmas, min, max ...
 
 """
 
@@ -17,10 +18,37 @@ from scipy.sparse.sputils import isintlike
 
 
 def is_integral_array(x):
+    """
+    Check whether ``x`` is a numpy array containing integral values.
+
+    Args:
+        x (Any): The input to check.
+
+    Returns:
+        (bool): True if ``x`` is an integral array, otherwise False.
+
+    """
+
     return isinstance(x, np.ndarray) and np.issubdtype(x.dtype, np.integer)
 
 
-def to_array(input_iter, dtype=np.integer):
+def to_array(input_iter, dtype=int):
+    """
+    Convert ``input_iter`` to an integral array.
+
+    Args:
+        input_iter (Iterable): The input iterable to convert.
+        dtype (dtype_like): Datatype of the output array.
+
+    Raises:
+        ValueError: When the input iterable cannot be converted or is invalid.
+
+    Returns:
+        (array_like): The output integral array.
+
+    """
+
+    # Do nothing if the array is already an integral array
     if is_integral_array(input_iter):
         return input_iter
 
@@ -32,30 +60,76 @@ def to_array(input_iter, dtype=np.integer):
 
 
 class FractionArray:
-    """ Array of rational numbers. """
+    """
+    FractionArray represents an array (or matrix, ...) of fractions.
+
+    The fractions are represented as two arrays of numbers: the numerators and
+    denominators. It defines a similar interface to numpy arrays and supports
+    all basic arithmetic operations.
+
+    Attributes:
+        numerator: An array of numerators.
+        denominator: An array of denominators
+
+    """
 
     numerator: np.ndarray
     denominator: np.ndarray
 
     @classmethod
-    def from_array(cls, x):
-        # Array of integers
-        if is_integral_array(x):
-            return cls(x, np.ones_like(x))
+    def from_array(cls, input_values):
+        """
+        Create a new FractionArray from given ``input_values``.
+
+        Args:
+            input_values (array-like or iterable): The input values.
+
+            The valid input values are:
+                - numpy array
+                - iterable containing integral types or fractions (from the
+                  python ``fractions`` module)
+
+        Notes:
+            If the ``input_values`` are an (numpy) array-like, the resulting
+            array will inherit the datatype, otherwise, an ``int`` will be used
+            (which defaults to numpy ``int64`` on most systems).
+
+            The array is kept in a normalized state. The numerators carry the
+            sign and the GCD of numerators and denominators is always 1.
+
+        Warnings:
+            When given an array-like as an input it won't be copied but a
+            reference will be stored.
+
+            Division by zero is silently ignored.
+
+        Raises:
+            TypeError: The input values are invalid (for example, given input
+            contains floating point values or is of invalid shape).
+
+        Returns:
+            A new FractionArray.
+
+        """
+
+        if is_integral_array(input_values):
+            return cls(input_values, np.ones_like(input_values))
 
         # Test input is iterable
         try:
-            iter(x)
+            iter(input_values)
         except TypeError:
-            raise ValueError("Invalid input: {}".format(type(x)))
+            raise TypeError(
+                "Input is not an iterable: {}".format(type(input_values))
+            )
 
-        original_shape = np.shape(x)
-        size = np.size(x)
+        original_shape = np.shape(input_values)
+        size = np.size(input_values)
 
         numerator, denominator = np.empty(size, dtype=int), np.empty(
             size, dtype=int
         )
-        for i, val in enumerate(np.ravel(x)):
+        for i, val in enumerate(np.ravel(input_values)):
             if isinstance(val, Fraction):
                 numerator[i] = val.numerator
                 denominator[i] = val.denominator
@@ -66,16 +140,40 @@ class FractionArray:
                 denominator[i] = 1
                 continue
 
-            raise ValueError("Invalid value: {}".format(val))
+            raise TypeError("Invalid value: {}".format(val))
 
         return cls(
             numerator.reshape(original_shape),
             denominator.reshape(original_shape),
         )
 
-    def __init__(
-        self, numerator, denominator, _normalize=True, dtype=np.integer
-    ):
+    def __init__(self, numerator, denominator, dtype=int, _normalize=True):
+        """
+        Create a new FractionArray.
+
+        Args:
+            numerator (array_like): Array of numerators
+            denominator (array_like): Array of denominators
+            dtype (dtype_like):
+                An integral datatype of the internal representation.
+                (default: int)
+            _normalize (bool): Whether to normalize the input. (default: True)
+
+        Warnings:
+            When ``numerator`` or ``denominator`` are numpy arrays a reference
+            is kept instead of copying.
+
+        Raises:
+            ValueError: When the input iterable cannot be converted or is
+            invalid.
+
+        Raises:
+
+        """
+
+        if dtype is None:
+            dtype = int
+
         numerator = to_array(numerator, dtype=dtype)
         denominator = to_array(denominator, dtype=dtype)
 
@@ -90,12 +188,14 @@ class FractionArray:
         self.denominator = denominator
 
         self.shape = self.numerator.shape
-        self.size = np.product(self.shape)
+        self.size = self.numerator.size
 
         if _normalize:
             self.normalize()
 
     def normalize(self):
+        """ Convert the array to a normalized form. """
+
         gcds = np.gcd(self.numerator, self.denominator)
 
         neg_ans = np.logical_xor(self.numerator < 0, self.denominator < 0)
@@ -114,13 +214,13 @@ class FractionArray:
     def argmin(self):
         # TODO: This can overflow! Find a safer method.
         #       For example first convert to floats.
-        lcm = np.lcm.reduce(self.denominator)
+        lcm = np.lcm.reduce(self.denominator, initial=1)
         return np.argmin((lcm // self.denominator) * self.numerator)
 
     def argmax(self):
         # TODO: This can overflow! Find a safer method.
         #       For example first convert to floats.
-        lcm = np.lcm.reduce(self.denominator)
+        lcm = np.lcm.reduce(self.denominator, initial=1)
         return np.argmax((lcm // self.denominator) * self.numerator)
 
     def reshape(self, *args, **kwargs):

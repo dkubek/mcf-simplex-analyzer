@@ -46,7 +46,7 @@ def test_from_integral_array():
 def test_from_float_array():
     """ Fail to create a fraction array from floating point values. """
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         FractionArray.from_array(np.arange(10, dtype="f"))
 
 
