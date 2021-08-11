@@ -5,20 +5,22 @@ import numpy as np
 
 from .fractionarray import FractionArray
 
+DEFAULT_MAX_ITERATIONS = 1e2
 
-def dantzig_entering(z, base):
-    positive = np.where(~base)[0]
-    entering = positive[z[positive].argmax()]
+
+def dantzig_entering(objective, base):
+    nonbasic = np.where(~base)[0]
+    positive = np.where(objective[nonbasic] > 0)[0]
+    entering = nonbasic[positive[objective[nonbasic][positive].argmax()]]
 
     return entering
 
 
-def dantzig_leaving(T, entering):
-    positive = np.where(T[..., entering].numerator >= 0)[0]
+def dantzig_leaving(table, entering):
+    positive = np.where(table[..., entering] > 0)[0]
 
-    bounds = T[..., -1][positive] / T[..., entering][positive]
-    print("Bounds:", bounds)
-    valid = np.where(bounds.numerator > 0)[0]
+    bounds = table[..., -1][positive] / table[..., entering][positive]
+    valid = np.where(bounds >= 0)[0]
     leaving_row = positive[valid[bounds[valid].argmin()]]
 
     return leaving_row
@@ -110,12 +112,12 @@ class Simplex:
         if formulation.type == LPFormType.Canonical:
             return cls._from_canonical(formulation)
         else:
-            raise NotImplemented
+            raise NotImplementedError
 
     def _get_update_row(self, entering, leaving_row):
         return self.table[leaving_row] / self.table[leaving_row, entering]
 
-    def _update_objective(self, update_row, entering, leaving_row):
+    def _update_objective(self, update_row, entering):
         update = update_row * self.objective[entering]
         update[:-1] *= -1
 
@@ -128,6 +130,7 @@ class Simplex:
         self._var_index_to_row[entering] = self._var_index_to_row[leaving]
 
         self._base[entering] = True
+        self._base[leaving] = False
 
     def _update_table(self, update_row, entering, leaving_row):
         self.table[leaving_row] = update_row
@@ -142,6 +145,9 @@ class Simplex:
         return np.all(self.objective[:-1][~self._base] < 0)
 
     def solve(self):
+        last_objective = self.objective[-1]
+        iterations_from_last_increase = 0
+
         while True:
             print(self.objective)
             print("Objective function:", self.objective)
@@ -170,5 +176,15 @@ class Simplex:
             update_row = self._get_update_row(entering, leaving_row)
 
             self._update_table(update_row, entering, leaving_row)
-            self._update_objective(update_row, entering, leaving_row)
+            self._update_objective(update_row, entering)
             self._update_base(entering, leaving_row)
+
+            if self.objective[-1] > last_objective:
+                last_objective = self.objective[-1]
+                iterations_from_last_increase = 0
+                continue
+
+            iterations_from_last_increase += 1
+            if iterations_from_last_increase >= DEFAULT_MAX_ITERATIONS:
+                print("Max iterations reached, probably cycling")
+                break
