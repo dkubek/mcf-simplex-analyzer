@@ -2,11 +2,6 @@
 """
 FractionArray is an array of fractions.
 
-TODO:
-    - Refactor operation dispatch for operations
-    - Rename ``regular`` -> ``integral``
-    - Refactor argmin, argmax, min, max ...
-
 """
 
 from fractions import Fraction
@@ -214,23 +209,112 @@ class FractionArray:
 
         self.numerator[neg_ans] *= -1
 
-    def minimum(self):
-        raise NotImplemented
+    def _min_or_max(self, ext_fun, axis=None, eps=1e-6):
+        floats = np.true_divide(self.numerator, self.denominator)
+        float_extreme = ext_fun(floats)
 
-    def maximum(self):
-        raise NotImplemented
+        valid = np.where(
+            (floats <= float_extreme + eps) & (floats >= float_extreme - eps)
+        )[0]
 
-    def argmin(self):
-        # TODO: This can overflow! Find a safer method.
-        #       For example first convert to floats.
-        lcm = np.lcm.reduce(self.denominator, initial=1)
-        return np.argmin((lcm // self.denominator) * self.numerator)
+        lcm = np.lcm.reduce(self.denominator[valid], initial=1)
+        return ext_fun(
+            (lcm // self.denominator[valid]) * self.numerator[valid], axis=axis
+        )
 
-    def argmax(self):
-        # TODO: This can overflow! Find a safer method.
-        #       For example first convert to floats.
-        lcm = np.lcm.reduce(self.denominator, initial=1)
-        return np.argmax((lcm // self.denominator) * self.numerator)
+    def min(self, axis=None, eps=1e-6):
+        """
+        Return the minimum or minimum along an axis.
+
+        Notes:
+            The values are first converted to floating point values and then
+            close values determined by given ``eps`` are found and compared
+            using exact arithmetic.
+
+        Args:
+            axis: Same as for numpy ``amin``
+            eps (float): The precision of floating point comparison.
+
+        Returns:
+            The minimum of the array.
+
+        """
+
+        return self._min_or_max(np.min, axis=axis, eps=eps)
+
+    def max(self, axis=None, eps=1e-6):
+        """
+        Return the maximum or maximum along an axis.
+
+        Notes:
+            The values are first converted to floating point values and then
+            close values determined by given ``eps`` are found and compared
+            using exact arithmetic.
+
+        Args:
+            axis: Same as for numpy ``amin``
+            eps (float): The precision of floating point comparison.
+
+        Returns:
+            The maximum of the array.
+
+        """
+
+        return self._min_or_max(np.max, axis=axis, eps=eps)
+
+    def _arg_min_or_max(self, arg_ext_fun, ext_fun, axis=None, eps=1e-6):
+        floats = np.true_divide(self.numerator, self.denominator)
+        float_extreme = ext_fun(floats)
+
+        valid = np.where(
+            (floats <= float_extreme + eps) & (floats >= float_extreme - eps)
+        )[0]
+
+        lcm = np.lcm.reduce(self.denominator[valid], initial=1)
+        return valid[
+            arg_ext_fun(
+                (lcm // self.denominator[valid]) * self.numerator[valid],
+                axis=axis,
+            )
+        ]
+
+    def argmin(self, axis=None, eps=1e-6):
+        """
+        Returns the indices of the minimum values along an axis.
+
+        Notes:
+            The values are first converted to floating point values and then
+            close values determined by given ``eps`` are found and compared
+            using exact arithmetic.
+
+        Args:
+            axis (int, optional):
+                By default, the index is into the flattened array, otherwise
+                along the specified axis.
+            eps (float): The precision of floating point comparison.
+
+        Returns:
+            (index_array): Array of indices into the array. It has the same
+            shape as self.shape with the dimension along axis removed.
+
+        See Also:
+            numpy.unravel_index
+
+        """
+
+        return self._arg_min_or_max(np.argmin, np.min, axis=axis, eps=eps)
+
+    def argmax(self, axis=None, eps=1e-6):
+        """
+        Returns the indices of the maximum values along an axis.
+
+        See Also:
+            FractionArray.argmin
+            numpy.unravel_index
+
+        """
+
+        return self._arg_min_or_max(np.argmax, np.max, axis=axis, eps=eps)
 
     def reshape(self, *args, **kwargs):
         """
