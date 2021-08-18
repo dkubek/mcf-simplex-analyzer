@@ -23,6 +23,7 @@ pylint = "^2.8.0"
 flake8 = "^3.9.1"
 matplotlib = "^3.4.2"
 scipy = "^1.7.0"
+pytest-cov = "^2.12.1"
 
 [tool.poetry.scripts]
 mcf-simplex = 'mcf_simplex_analyzer.cli:debug'

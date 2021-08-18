@@ -11,6 +11,72 @@ import numpy as np
 from scipy.sparse.sputils import isintlike
 
 
+newaxis = None
+
+
+def concatenate(farrays, axis=0, dtype=None):
+    """
+    Join a sequence of arrays along an existing axis.
+
+    Args:
+        farrays (sequence of FractionArrays): A sequence of FractionArrays
+        axis (int, optional):
+            The axis along which the arrays will be joined. If axis is None,
+            arrays are flattened before use. (default 0)
+        dtype (dtype_like):
+            If provided, the destination array will have this dtype.
+
+    Returns:
+        FractionArray: The concatenated array.
+
+    """
+
+    return FractionArray(
+        np.concatenate(
+            [farr.numerator for farr in farrays], axis=axis, dtype=dtype
+        ),
+        np.concatenate(
+            [farr.denominator for farr in farrays], axis=axis, dtype=dtype
+        ),
+    )
+
+
+def hstack(farrays):
+    """
+    Stack arrays in sequence horizontally (column wise).
+
+    Args:
+        farrays (sequence of FractionArrays): A sequence of FractionArrays
+
+    Returns:
+        FractionArray: The stacked array.
+
+    """
+
+    return FractionArray(
+        np.hstack([farr.numerator for farr in farrays]),
+        np.hstack([farr.denominator for farr in farrays]),
+    )
+
+
+def vstack(farrays):
+    """
+    Stack arrays in sequence vertically (row wise).
+
+    Args:
+        farrays (sequence of FractionArrays): A sequence of FractionArrays
+
+    Returns:
+        FractionArray: The stacked array.
+
+    """
+
+    return FractionArray(
+        np.vstack([farr.numerator for farr in farrays]),
+        np.vstack([farr.denominator for farr in farrays]),
+    )
+
+
 def is_integral_array(x):
     """
     Check whether ``x`` is a numpy array containing integral values.

@@ -16,9 +16,10 @@ from enum import Enum
 import attr
 import numpy as np
 
-from .fractionarray import FractionArray
+import mcf_simplex_analyzer.fractionarray as fa
+from mcf_simplex_analyzer.fractionarray import FractionArray
 
-DEFAULT_MAX_ITERATIONS = 1e5
+DEFAULT_MAX_ITERATIONS = 1e3
 
 
 class LPFormType(Enum):
@@ -67,62 +68,213 @@ class Simplex:
     _row_to_var_index = attr.ib()
     _var_index_to_row = attr.ib()
 
+    _non_slack_variables = attr.ib(default=None)
+
+    is_feasible = attr.ib(default=True)
+
     @classmethod
-    def _from_canonical(cls, form: LPFormulation):
-        m, n = form.table.shape
+    def _from_canonical(cls, formulation: LPFormulation):
+        """
+        Instantiate the simplex algorithm from canonical formulation.
 
-        if np.all(form.rhs >= 0):
-            slack = np.eye(m, dtype=form.table.numerator.dtype)
-            new_table = FractionArray(
-                np.hstack(
-                    [
-                        form.table.numerator,
-                        slack,
-                        form.rhs.numerator[..., np.newaxis],
-                    ]
-                ),
-                np.hstack(
-                    [
-                        form.table.denominator,
-                        np.ones_like(slack),
-                        form.rhs.denominator[..., np.newaxis],
-                    ]
-                ),
+        Args:
+            formulation (LPFormulation): The formulation of the problem
+
+        Returns:
+            Simplex: Instance of the simplex algorithm ready for solving.
+
+        """
+
+        is_two_phase = np.any(formulation.rhs < 0)
+
+        if is_two_phase:
+            return cls._formulate_two_phase(formulation)
+
+        return cls._formulate_direct(formulation)
+
+    @classmethod
+    def _formulate_direct(cls, formulation):
+        """
+        Instantiate the simplex algorithm deriving initial solution
+        directly
+
+        """
+
+        m, n = formulation.table.shape
+
+        slack = FractionArray.from_array(
+            np.eye(m, dtype=formulation.table.numerator.dtype)
+        )
+        new_table = fa.hstack(
+            (formulation.table, slack, formulation.rhs[..., fa.newaxis])
+        )
+
+        slack_objective = FractionArray.from_array(
+            np.zeros(m, dtype=formulation.objective.numerator.dtype)
+        )
+        objective_value = FractionArray.from_array([0])
+        new_objective = fa.hstack(
+            [formulation.objective, slack_objective, objective_value]
+        )
+
+        base = np.hstack([np.zeros(n, dtype=bool), np.ones(m, dtype=bool)])
+
+        row_to_var_index = np.arange(m, dtype=int) + n
+        var_index_to_row = np.hstack(
+            [np.zeros(n, dtype=int), np.arange(m, dtype=int)]
+        )
+
+        return cls(
+            table=new_table,
+            objective_row=new_objective,
+            base=base,
+            row_to_var_index=row_to_var_index,
+            var_index_to_row=var_index_to_row,
+            non_slack_variables=n,
+        )
+
+    @classmethod
+    def _formulate_two_phase(cls, formulation):
+        """ Instantiate the simplex algorithm using two phase approach. """
+
+        m, n = formulation.table.shape
+
+        # Create the table for the first phase
+        slack = FractionArray.from_array(
+            np.eye(m, dtype=formulation.table.numerator.dtype)
+        )
+        aux_variable = FractionArray.from_array(
+            -np.ones(m, dtype=formulation.table.numerator.dtype).reshape(m, 1)
+        )
+        table = fa.hstack(
+            (
+                aux_variable,
+                formulation.table,
+                slack,
+                formulation.rhs[..., fa.newaxis],
             )
+        )
 
-            new_objective = FractionArray(
-                np.hstack(
-                    [
-                        form.objective.numerator,
-                        np.zeros(m, dtype=form.objective.numerator.dtype),
-                        [0],
-                    ]
-                ),
-                np.hstack(
-                    [
-                        form.objective.denominator,
-                        np.ones(m, dtype=form.objective.denominator.dtype),
-                        [1],
-                    ]
-                ),
+        # Create the objective for the first phase
+        slack_objective = FractionArray.from_array(
+            np.zeros(m, dtype=formulation.objective.numerator.dtype)
+        )
+        objective_value = FractionArray.from_array([0])
+        aux_objective = FractionArray.from_array(
+            np.zeros(n + 1, dtype=formulation.table.numerator.dtype),
+        )
+        aux_objective[0] = -1
+        objective = fa.hstack(
+            (
+                aux_objective,
+                slack_objective,
+                objective_value,
             )
+        )
 
-            base = np.hstack([np.zeros(n, dtype=bool), np.ones(m, dtype=bool)])
+        base = np.hstack([np.zeros(n + 1, dtype=bool), np.ones(m, dtype=bool)])
 
-            row_to_var_index = np.arange(m, dtype=int) + n
-            var_index_to_row = np.hstack(
-                [np.zeros(n, dtype=int), np.arange(m, dtype=int)]
+        row_to_var_index = np.arange(m, dtype=int) + (n + 1)
+        var_index_to_row = np.hstack(
+            [np.zeros(n + 1, dtype=int), np.arange(m, dtype=int)]
+        )
+
+        phase_one = cls(
+            table=table,
+            objective_row=objective,
+            base=base,
+            row_to_var_index=row_to_var_index,
+            var_index_to_row=var_index_to_row,
+            non_slack_variables=n + 1,
+        )
+
+        print(phase_one)
+
+        # Try to find a feasible solution
+        leaving_row = phase_one.table[..., -1].argmin()
+        print(0, leaving_row)
+        phase_one._pivot(0, leaving_row)
+        phase_one.solve(_aux=True)
+        print("End")
+
+        # If the auxiliary variable is basic, the problem is infeasible
+        if phase_one.base[0]:
+            phase_one.is_feasible = False
+            return phase_one
+
+        # Formulate phase two
+        phase_two_table = phase_one.table[..., 1:]
+        phase_two_row_to_var_index = phase_one._row_to_var_index - 1
+        phase_two_var_index_to_row = phase_one._var_index_to_row[1:]
+        phase_two_base = base[1:]
+
+        phase_two_objective = FractionArray.from_array(
+            np.zeros(m + n + 1, dtype=formulation.objective.numerator.dtype)
+        )
+        for var_index, coefficient in enumerate(formulation.objective):
+            if coefficient == 0:
+                continue
+
+            print("Hello ", var_index, coefficient)
+            if phase_two_base[var_index]:
+                row_index = phase_two_var_index_to_row[var_index]
+
+                print("Is base")
+                print(row_index)
+                assert phase_two_table[row_index, var_index] == 1
+
+                phase_two_objective[:var_index] -= (
+                    coefficient * phase_two_table[row_index, :var_index]
+                )
+                phase_two_objective[(var_index + 1) :] -= (
+                    coefficient * phase_two_table[row_index, (var_index + 1) :]
+                )
+                print(phase_two_objective)
+                continue
+
+            print("Orig", phase_two_objective[var_index])
+            print("Coeff", coefficient)
+            print("Total", phase_two_objective[var_index] + coefficient)
+            phase_two_objective[var_index] = (
+                phase_two_objective[var_index] + coefficient
             )
+            print(phase_two_objective)
 
-            return cls(
+        phase_two_objective[-1] *= -1
+
+        return cls(
+            table=phase_two_table,
+            objective_row=phase_two_objective,
+            base=phase_two_base,
+            row_to_var_index=phase_two_row_to_var_index,
+            var_index_to_row=phase_two_var_index_to_row,
+            non_slack_variables=n,
+        )
+
+    @classmethod
+    def _from_standard(cls, formulation: LPFormulation):
+        """
+        Instantiate the simplex algorithm from standard formulation.
+
+        Args:
+            formulation (LPFormulation): The formulation of the problem
+
+        Returns:
+            Simplex: Instance of the simplex algorithm ready for solving.
+
+        """
+
+        new_table = fa.vstack((formulation.table, -formulation.table))
+        new_rhs = fa.hstack((formulation.rhs, -formulation.rhs))
+
+        return cls._from_canonical(
+            LPFormulation(
+                type=LPFormType.Canonical,
                 table=new_table,
-                objective_row=new_objective,
-                base=base,
-                row_to_var_index=row_to_var_index,
-                var_index_to_row=var_index_to_row,
+                rhs=new_rhs,
+                objective=formulation.objective,
             )
-        else:
-            raise NotImplementedError("Two phase simplex not implemented.")
+        )
 
     @classmethod
     def instantiate(cls, formulation: LPFormulation):
@@ -145,10 +297,12 @@ class Simplex:
 
         if formulation.type == LPFormType.Canonical:
             return cls._from_canonical(formulation)
+        elif formulation.type == LPFormType.Standard:
+            return cls._from_standard(formulation)
         else:
             raise NotImplementedError
 
-    def state(self):
+    def state(self, slack=False):
         """ Return the value of the objective function and variable values. """
 
         variables = FractionArray.from_array(
@@ -158,12 +312,16 @@ class Simplex:
             self._var_index_to_row[self._row_to_var_index], -1
         ]
 
+        if not slack and self._non_slack_variables is not None:
+            variables = variables[: self._non_slack_variables]
+
         return {"value": self.objective_val, "variables": variables}
 
     def solve(
         self,
         decision_rule="dantzig",
         degenerate_max_iter=DEFAULT_MAX_ITERATIONS,
+        _aux=False,
     ):
         """
         Start the simplex algorithm.
@@ -184,6 +342,10 @@ class Simplex:
             degenerate_max_iter,
         )
 
+        if not self.is_feasible:
+            logger.info("Problem is infeasible")
+            return {"result": "infeasible"}
+
         if decision_rule not in DECISION_RULES:
             raise ValueError(
                 "Decision rule {} is invalid or "
@@ -197,6 +359,8 @@ class Simplex:
 
         iteration_count = 0
         while True:
+            print(iteration_count)
+            print(self)
             logger.debug("Iteration count %d", iteration_count)
 
             # Check whether the optimal value has been reached
@@ -206,21 +370,27 @@ class Simplex:
 
             # Determine the entering variable
             entering = decision_function(self)
-            logger.debug("Entering:", entering)
+            if entering is None:
+                logger.info("Success, no entering variable")
+                return {"result": "success", **self.state()}
+
+            logger.debug("Entering: %d", entering)
 
             if self._is_unbounded(entering):
                 logger.info("The problem is unbounded.")
                 return {"result": "unbounded"}
 
-            leaving_row = self._determine_leaving_row(entering)
-            logger.debug("Leaving row: %d", leaving_row)
+            # Determine leaving row
+            leaving_row = self._determine_leaving_row(entering, _aux=_aux)
+            logger.debug(
+                "Leaving row: %d, only_positive: %s",
+                leaving_row,
+            )
 
-            # Update the table
-            update_row = self._get_update_row(entering, leaving_row)
+            print(entering, leaving_row)
+            self._pivot(entering, leaving_row)
 
-            self._update_table(update_row, entering, leaving_row)
-            self._update_objective(update_row, entering)
-            self._update_base(entering, leaving_row)
+            iteration_count += 1
 
             if self.objective_val > last_objective:
                 last_objective = self.objective_val
@@ -232,16 +402,31 @@ class Simplex:
                 logger.info("Max iterations reached, probably cycling.")
                 return {"result": "cycle"}
 
-            iteration_count += 1
+    def _pivot(self, entering, leaving_row):
+        """
+        Pivot the table through the given entering variable and leaving row.
 
-    def _determine_leaving_row(self, entering):
+        """
+
+        update_row = self._get_update_row(entering, leaving_row)
+        self._update_table(update_row, entering, leaving_row)
+        self._update_objective(update_row, entering)
+        self._update_base(entering, leaving_row)
+
+    def _determine_leaving_row(self, entering, _aux=False):
         positive = np.where(self.table[..., entering] > 0)[0]
 
         bounds = (
             self.table[..., -1][positive] / self.table[..., entering][positive]
         )
         valid = np.where(bounds >= 0)[0]
-        leaving_row = positive[valid[bounds[valid].argmin()]]
+        arg_min_bound = valid[bounds[valid].argmin()]
+        leaving_row = positive[arg_min_bound]
+
+        # Choose the auxiliary variable with higher priority
+        if _aux and self.base[0] and positive[0] == 0 and valid[0] == 0:
+            if bounds[0] == bounds[arg_min_bound]:
+                leaving_row = self._var_index_to_row[0]
 
         return leaving_row
 
@@ -290,11 +475,16 @@ class Simplex:
 def dantzig(simplex: Simplex):
     nonbasic = np.where(~simplex.base)[0]
     positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
+
+    if positive.size == 0:
+        return None
+
     entering = nonbasic[
         positive[simplex.objective_fun[nonbasic][positive].argmax()]
     ]
 
     return entering
+
 
 def bland(simplex: Simplex):
     pass
