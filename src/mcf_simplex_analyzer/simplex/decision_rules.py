@@ -80,5 +80,73 @@ def dantzig(simplex: Simplex):
     return entering
 
 
-def bland(simplex: Simplex):
-    pass
+class Bland(SimplexDecisionRule):
+    @classmethod
+    def entering(cls, simplex):
+        nonbasic = np.where(~simplex.base)[0]
+        positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
+
+        if positive.size == 0:
+            return None
+
+        return nonbasic[positive[0]]
+
+    @classmethod
+    def leaving_row(cls, entering, simplex):
+        positive = np.where(simplex.table[..., entering] > 0)[0]
+
+        bounds = (
+            simplex.table[..., -1][positive]
+            / simplex.table[..., entering][positive]
+        )
+        valid = np.where(bounds >= 0)[0]
+
+        return positive[valid[bounds[valid].argmin()]]
+
+
+class Lexicographic(SimplexDecisionRule):
+    @classmethod
+    def entering(cls, simplex):
+        return dantzig(simplex)
+
+    @classmethod
+    def leaving_row(cls, entering, simplex):
+        positive = np.where(simplex.table[..., entering] > 0)[0]
+
+        bounds = (
+            simplex.table[..., -1][positive]
+            / simplex.table[..., entering][positive]
+        )
+        valid = np.where(bounds >= 0)[0]
+        min_val = bounds[valid].min()
+        candidates = positive[np.where(bounds == min_val)[0]]
+
+        nonbasic = ~simplex.base
+        leaving_row = None
+        best_candidate = None
+        for candidate_row in candidates:
+            divide_coefficient = simplex.table[candidate_row, entering]
+            if divide_coefficient == 0:
+                continue
+
+            next_candidate = (
+                simplex.table[candidate_row, :-1][nonbasic]
+                / divide_coefficient
+            )
+            if leaving_row is None or _is_lexicographically_greater(
+                next_candidate, best_candidate
+            ):
+                leaving_row = candidate_row
+                best_candidate = next_candidate
+
+        return leaving_row
+
+
+def _is_lexicographically_greater(fa, fb):
+    unequal = np.where(fa != fb)[0]
+    if unequal.size > 0:
+        index_unequal = unequal[0]
+        if fa[index_unequal] > fb[index_unequal]:
+            return True
+
+    return False

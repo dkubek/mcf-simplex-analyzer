@@ -275,19 +275,6 @@ class FractionArray:
 
         self.numerator[neg_ans] *= -1
 
-    def _min_or_max(self, ext_fun, axis=None, eps=1e-6):
-        floats = np.true_divide(self.numerator, self.denominator)
-        float_extreme = ext_fun(floats)
-
-        valid = np.where(
-            (floats <= float_extreme + eps) & (floats >= float_extreme - eps)
-        )[0]
-
-        lcm = np.lcm.reduce(self.denominator[valid], initial=1)
-        return ext_fun(
-            (lcm // self.denominator[valid]) * self.numerator[valid], axis=axis
-        )
-
     def min(self, axis=None, eps=1e-6):
         """
         Return the minimum or minimum along an axis.
@@ -306,7 +293,9 @@ class FractionArray:
 
         """
 
-        return self._min_or_max(np.min, axis=axis, eps=eps)
+        return self[
+            np.unravel_index(self.argmin(axis=axis, eps=eps), self.shape)
+        ]
 
     def max(self, axis=None, eps=1e-6):
         """
@@ -326,7 +315,9 @@ class FractionArray:
 
         """
 
-        return self._min_or_max(np.max, axis=axis, eps=eps)
+        return self[
+            np.unravel_index(self.argmax(axis=axis, eps=eps), self.shape)
+        ]
 
     def _arg_min_or_max(self, arg_ext_fun, ext_fun, axis=None, eps=1e-6):
         floats = np.true_divide(self.numerator, self.denominator)

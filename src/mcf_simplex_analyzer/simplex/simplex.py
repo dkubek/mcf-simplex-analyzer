@@ -2,12 +2,6 @@
 """
 The simplex algorithm.
 
-TODO:
-    - Refactor output
-    - Refactor instantiation
-    - Two phase simplex
-    - Add tests
-
 """
 
 import logging
