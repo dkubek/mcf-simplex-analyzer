@@ -18,6 +18,7 @@ import numpy as np
 
 import mcf_simplex_analyzer.fractionarray as fa
 from mcf_simplex_analyzer.fractionarray import FractionArray
+import mcf_simplex_analyzer.simplex as s
 
 DEFAULT_MAX_ITERATIONS = 1e3
 
@@ -188,14 +189,10 @@ class Simplex:
             non_slack_variables=n + 1,
         )
 
-        print(phase_one)
-
         # Try to find a feasible solution
         leaving_row = phase_one.table[..., -1].argmin()
-        print(0, leaving_row)
         phase_one._pivot(0, leaving_row)
-        phase_one.solve(_aux=True)
-        print("End")
+        phase_one.solve(decision_rule="_aux")
 
         # If the auxiliary variable is basic, the problem is infeasible
         if phase_one.base[0]:
@@ -215,12 +212,9 @@ class Simplex:
             if coefficient == 0:
                 continue
 
-            print("Hello ", var_index, coefficient)
             if phase_two_base[var_index]:
                 row_index = phase_two_var_index_to_row[var_index]
 
-                print("Is base")
-                print(row_index)
                 assert phase_two_table[row_index, var_index] == 1
 
                 phase_two_objective[:var_index] -= (
@@ -229,16 +223,9 @@ class Simplex:
                 phase_two_objective[(var_index + 1) :] -= (
                     coefficient * phase_two_table[row_index, (var_index + 1) :]
                 )
-                print(phase_two_objective)
                 continue
 
-            print("Orig", phase_two_objective[var_index])
-            print("Coeff", coefficient)
-            print("Total", phase_two_objective[var_index] + coefficient)
-            phase_two_objective[var_index] = (
-                phase_two_objective[var_index] + coefficient
-            )
-            print(phase_two_objective)
+            phase_two_objective[var_index] += coefficient
 
         phase_two_objective[-1] *= -1
 
@@ -321,7 +308,6 @@ class Simplex:
         self,
         decision_rule="dantzig",
         degenerate_max_iter=DEFAULT_MAX_ITERATIONS,
-        _aux=False,
     ):
         """
         Start the simplex algorithm.
@@ -346,21 +332,19 @@ class Simplex:
             logger.info("Problem is infeasible")
             return {"result": "infeasible"}
 
-        if decision_rule not in DECISION_RULES:
+        if decision_rule not in s.DECISION_RULES:
             raise ValueError(
                 "Decision rule {} is invalid or "
                 "unsupported".format(decision_rule)
             )
 
-        decision_function = DECISION_RULES[decision_rule]
+        decision_rule = s.DECISION_RULES[decision_rule]
 
         last_objective = self.objective_val
         iterations_from_last_increase = 0
 
         iteration_count = 0
         while True:
-            print(iteration_count)
-            print(self)
             logger.debug("Iteration count %d", iteration_count)
 
             # Check whether the optimal value has been reached
@@ -369,7 +353,7 @@ class Simplex:
                 return {"result": "success", **self.state()}
 
             # Determine the entering variable
-            entering = decision_function(self)
+            entering = decision_rule.entering(self)
             if entering is None:
                 logger.info("Success, no entering variable")
                 return {"result": "success", **self.state()}
@@ -381,13 +365,12 @@ class Simplex:
                 return {"result": "unbounded"}
 
             # Determine leaving row
-            leaving_row = self._determine_leaving_row(entering, _aux=_aux)
+            leaving_row = decision_rule.leaving_row(entering, self)
             logger.debug(
                 "Leaving row: %d, only_positive: %s",
                 leaving_row,
             )
 
-            print(entering, leaving_row)
             self._pivot(entering, leaving_row)
 
             iteration_count += 1
@@ -412,23 +395,6 @@ class Simplex:
         self._update_table(update_row, entering, leaving_row)
         self._update_objective(update_row, entering)
         self._update_base(entering, leaving_row)
-
-    def _determine_leaving_row(self, entering, _aux=False):
-        positive = np.where(self.table[..., entering] > 0)[0]
-
-        bounds = (
-            self.table[..., -1][positive] / self.table[..., entering][positive]
-        )
-        valid = np.where(bounds >= 0)[0]
-        arg_min_bound = valid[bounds[valid].argmin()]
-        leaving_row = positive[arg_min_bound]
-
-        # Choose the auxiliary variable with higher priority
-        if _aux and self.base[0] and positive[0] == 0 and valid[0] == 0:
-            if bounds[0] == bounds[arg_min_bound]:
-                leaving_row = self._var_index_to_row[0]
-
-        return leaving_row
 
     def _get_update_row(self, entering, leaving_row):
         return self.table[leaving_row] / self.table[leaving_row, entering]
@@ -461,7 +427,7 @@ class Simplex:
         return np.all(self.objective_fun[~self.base] < 0)
 
     def _is_unbounded(self, entering):
-        return np.all(self.table[..., entering] < 0)
+        return np.all(self.table[..., entering] <= 0)
 
     def __getattr__(self, attribute):
         if attribute == "objective_val":
@@ -470,24 +436,3 @@ class Simplex:
             return self._objective_row[:-1]
         else:
             raise AttributeError(attribute + " not found")
-
-
-def dantzig(simplex: Simplex):
-    nonbasic = np.where(~simplex.base)[0]
-    positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
-
-    if positive.size == 0:
-        return None
-
-    entering = nonbasic[
-        positive[simplex.objective_fun[nonbasic][positive].argmax()]
-    ]
-
-    return entering
-
-
-def bland(simplex: Simplex):
-    pass
-
-
-DECISION_RULES = {"dantzig": dantzig}
