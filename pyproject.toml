@@ -9,16 +9,23 @@ license = "MIT"
 python = ">=3.8,<3.10"
 numpy = "^1.20.2"
 numba = "^0.53.1"
-jupyterlab = "^3.0.14"
 click = "^7.1.2"
 sympy = "^1.8"
-flake8 = "^3.9.1"
-pylint = "^2.8.2"
+networkx = "^2.6.1"
+attrs = "^21.2.0"
+scipy = "^1.7.0"
 
 [tool.poetry.dev-dependencies]
+jupyterlab = "^3.0.14"
 pytest = "^6.2.3"
 black = "^20.8b1"
 pylint = "^2.8.0"
+flake8 = "^3.9.1"
+matplotlib = "^3.4.2"
+scipy = "^1.7.0"
+pytest-cov = "^2.12.1"
+PuLP = "^2.5.0"
+jupyterlab-code-formatter = "^1.4.10"
 
 [tool.poetry.scripts]
 mcf-simplex = 'mcf_simplex_analyzer.cli:debug'

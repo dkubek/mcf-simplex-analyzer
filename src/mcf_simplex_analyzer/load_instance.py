@@ -1,15 +1,20 @@
-""" Load a MCF instance """
+"""
+Load a MCF instance
+
+TODO:
+    - Add option to specify the precision for input floating point values
+"""
 
 import logging
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, MutableMapping, Sequence
+from typing import Any, MutableMapping, Sequence, Dict
 
 import numpy as np
+from mcf_simplex_analyzer.fractionarray import FractionArray
 
-FractionArray = namedtuple("FractionArray", ("numerators", "denominator"))
 
 SUPPORTED_INSTANCES = ("mnetgen", "pds", "planar", "grid", "jlf")
 """ Supported instance formats """
@@ -37,6 +42,8 @@ SUP_FIELD_TYPES = {
 }
 
 
+# TODO: report real number of edges, the links_no currently denotes the number
+#       edges before being merged together
 @dataclass
 class InstanceInfo:
     """ Information about the instance. """
@@ -56,6 +63,30 @@ class SupplyInfo:
     commodity: np.ndarray
     flow: FractionArray
 
+    def __len__(self):
+        return len(self.origin)
+
+    def __getitem__(self, key):
+        return (
+            self.origin[key],
+            self.destination[key],
+            self.commodity[key],
+            self.flow[key],
+        )
+
+    def __iter__(self):
+        return iter(
+            zip(
+                self.origin,
+                self.destination,
+                self.commodity,
+                self.flow,
+            )
+        )
+
+    def __reversed__(self):
+        return reversed(self.__iter__())
+
 
 @dataclass
 class ArcInfo:
@@ -68,13 +99,40 @@ class ArcInfo:
     individual_capacity: FractionArray
     mutual_ptr: np.ndarray
 
+    def __len__(self):
+        return len(self.fromnode)
+
+    def __getitem__(self, key):
+        return (
+            self.fromnode[key],
+            self.tonode[key],
+            self.commodity[key],
+            self.cost[key],
+            self.individual_capacity[key],
+            self.mutual_ptr[key],
+        )
+
+    def __iter__(self):
+        return iter(
+            zip(
+                self.fromnode,
+                self.tonode,
+                self.commodity,
+                self.cost,
+                self.individual_capacity,
+                self.mutual_ptr,
+            )
+        )
+
+    def __reversed__(self):
+        return reversed(self.__iter__())
+
 
 @dataclass
 class MutualInfo:
     """ Information about mutual cappacities """
 
-    capacity: FractionArray
-    mutual_ptr: np.ndarray
+    mapping: Dict[int, Fraction]
 
 
 @dataclass
@@ -134,7 +192,9 @@ def _to_array_types(
                 map(lambda frac: frac.denominator, data[field]), dtype=np.int64
             )
 
-            arr = FractionArray(numerators, denominators)
+            arr = FractionArray(
+                numerator=numerators, denominator=denominators
+            )
         else:
             arr = np.array(data[field], dtype=dtype)
 
@@ -220,7 +280,7 @@ def read_sup(sup_file: Path, instance_format: str):
 
     # Split the node field into origin/destination by inspecting the flow
     if instance_format in ["mnetgen", "pds", "planar", "grid"]:
-        nums = data["flow"].numerators
+        nums = data["flow"].numerator
         sign = np.sign(nums)
         origin = -np.ones_like(data["node"])
         destination = -np.ones_like(data["node"])
@@ -254,5 +314,25 @@ def read_mut(mut_file: Path, instance_format: str):
         raise NotImplementedError("read_arc: Not implemented!")
 
     data = _read_file(mut_file, MUT_FIELD_TYPES, fields)
+    mutual_mapping = dict(zip(data["mutual_ptr"], data["capacity"]))
 
-    return MutualInfo(**data)
+    return MutualInfo(mapping=mutual_mapping)
+
+
+def load_instance(
+    instance_format: str,
+    nod_file: Path,
+    arc_file: Path,
+    sup_file: Path,
+    mut_file: Path,
+) -> Instance:
+    """ Load given instance """
+
+    instanceinfo = read_nod(nod_file)
+    arcinfo = read_arc(arc_file, instance_format)
+    supinfo = read_sup(sup_file, instance_format)
+    mutinfo = read_mut(mut_file, instance_format)
+
+    return Instance(
+        info=instanceinfo, arcs=arcinfo, supply=supinfo, mutual=mutinfo
+    )
