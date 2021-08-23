@@ -487,6 +487,17 @@ tornado = ">=6.1.0"
 test = ["coverage", "pytest (>=6.0)", "pytest-cov", "pytest-console-scripts", "pytest-check-links (>=0.5)", "jupyterlab-server[test] (>=2.2,<3.0)", "requests", "requests-cache", "virtualenv", "check-manifest"]
 
 [[package]]
+name = "jupyterlab-code-formatter"
+version = "1.4.10"
+description = "Code formatter for JupyterLab"
+category = "dev"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+jupyterlab = ">=3.0,<4.0"
+
+[[package]]
 name = "jupyterlab-pygments"
 version = "0.1.2"
 description = "Pygments theme using JupyterLab CSS variables"
@@ -875,6 +886,14 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "pulp"
+version = "2.5.0"
+description = "PuLP is an LP modeler written in python. PuLP can generate MPS or LP files and call GLPK, COIN CLP/CBC, CPLEX, and GUROBI to solve linear problems."
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "py"
 version = "1.10.0"
 description = "library with cross-python path, ini-parsing, io, code, log facilities"
@@ -1237,7 +1256,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<3.10"
-content-hash = "b3204886296faf424428890e479dc410ecda272566c83fbb967325d232a2ff32"
+content-hash = "8eab4de83b342f2ebad9e44a448f7bb6ae7c49a00aa38e4ff2bf84c78a56f315"
 
 [metadata.files]
 anyio = [
@@ -1557,6 +1576,10 @@ jupyter-server = [
 jupyterlab = [
     {file = "jupyterlab-3.0.16-py3-none-any.whl", hash = "sha256:88f6e7580c15cf731d96495fda362e786753e18d1e3e7e735915862efb602a92"},
     {file = "jupyterlab-3.0.16.tar.gz", hash = "sha256:7ad4fbe1f6d38255869410fd151a8b15692a663ca97c0a8146b3f5c40e275c23"},
+]
+jupyterlab-code-formatter = [
+    {file = "jupyterlab_code_formatter-1.4.10-py3-none-any.whl", hash = "sha256:10a7f2ab44a4539a44ec6bf3fc3b27e7ed22c7ab975e6503823e21d7e60abae7"},
+    {file = "jupyterlab_code_formatter-1.4.10.tar.gz", hash = "sha256:1645fd80b99d590d60fe0f3c078c9101ad62dfdbfac5e78b4c2d334896ab526f"},
 ]
 jupyterlab-pygments = [
     {file = "jupyterlab_pygments-0.1.2-py2.py3-none-any.whl", hash = "sha256:abfb880fd1561987efaefcb2d2ac75145d2a5d0139b1876d5be806e32f630008"},
@@ -1904,6 +1927,10 @@ prompt-toolkit = [
 ptyprocess = [
     {file = "ptyprocess-0.7.0-py2.py3-none-any.whl", hash = "sha256:4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35"},
     {file = "ptyprocess-0.7.0.tar.gz", hash = "sha256:5c5d0a3b48ceee0b48485e0c26037c0acd7d29765ca3fbb5cb3831d347423220"},
+]
+pulp = [
+    {file = "PuLP-2.5.0-py3-none-any.whl", hash = "sha256:dec41176fcb5d935726f98d4ad5e51346ba7165b3ec814e44dbd762006b0a605"},
+    {file = "PuLP-2.5.0.tar.gz", hash = "sha256:5dc7d76bfb1da06ac048066ced75603340d0d7ba8a7dbfce4040d6f126eda0d5"},
 ]
 py = [
     {file = "py-1.10.0-py2.py3-none-any.whl", hash = "sha256:3b80836aa6d1feeaa108e046da6423ab8f6ceda6468545ae8d02d9d58d18818a"},

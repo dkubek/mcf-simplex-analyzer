@@ -24,6 +24,8 @@ flake8 = "^3.9.1"
 matplotlib = "^3.4.2"
 scipy = "^1.7.0"
 pytest-cov = "^2.12.1"
+PuLP = "^2.5.0"
+jupyterlab-code-formatter = "^1.4.10"
 
 [tool.poetry.scripts]
 mcf-simplex = 'mcf_simplex_analyzer.cli:debug'
