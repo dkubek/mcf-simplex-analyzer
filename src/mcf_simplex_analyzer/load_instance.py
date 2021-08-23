@@ -193,7 +193,7 @@ def _to_array_types(
             )
 
             arr = FractionArray(
-                numerators=numerators, denominators=denominators
+                numerator=numerators, denominator=denominators
             )
         else:
             arr = np.array(data[field], dtype=dtype)

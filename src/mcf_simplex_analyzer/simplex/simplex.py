@@ -348,9 +348,9 @@ class Simplex:
 
             # Determine the entering variable
             entering = decision_rule.entering(self)
-            if entering is None:
-                logger.info("Success, no entering variable")
-                return {"result": "success", **self.state()}
+            #if entering is None:
+            #    logger.info("Success, no entering variable")
+            #    return {"result": "success", **self.state()}
 
             logger.debug("Entering: %d", entering)
 
@@ -418,7 +418,7 @@ class Simplex:
             self.table[row] -= self.table[row, entering] * update_row
 
     def _is_end(self):
-        return np.all(self.objective_fun[~self.base] < 0)
+        return np.all(self.objective_fun[~self.base] <= 0)
 
     def _is_unbounded(self, entering):
         return np.all(self.table[..., entering] <= 0)

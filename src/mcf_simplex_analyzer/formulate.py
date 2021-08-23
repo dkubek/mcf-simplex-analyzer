@@ -39,15 +39,36 @@ def formulate_concurrent_flow_problem(instance: Instance):
     logger = logging.getLogger(__name__)
     logger.info("Formulating the LP problem ...")
 
-    flow = find_max_flows(instance)
+    network_info = collect_network_info(instance)
+    logger.debug("Network info=%s", network_info)
 
-    logger.debug("%s", flow)
+    index = 0
+    variable_indices = {}
+    # Flow
+    for commodity in range(1, instance.info.products_no + 1):
+        for u in network_info.capacities:
+            for v in network_info.capacities[u]:
+                variable_indices[(u, v, commodity)] = index
+                index += 1
+
+    # Violation
+    for u in network_info.capacities:
+        for v in network_info.capacities[u]:
+            variable_indices[(u, v)] = index
+            index += 1
+
+    # print(variable_indices)
+    # print("edges", len(network_info.capacities))
+
+    max_flow_sum = find_max_flow_sum(instance, network_info)
+
+    logger.debug("%s", max_flow_sum)
     logger.info("Done formulating the problem")
 
-    return flow
+    return network_info, max_flow_sum
 
 
-def find_max_flows(instance: Instance):
+def find_max_flow_sum(instance: Instance, network_info: NetworkInfo):
     """
     Find the maximal flow for each commodity satisfying the `y` multiple of
     demands.
@@ -56,10 +77,7 @@ def find_max_flows(instance: Instance):
     logger = logging.getLogger(__name__)
     logger.info("Finding maximal flows for commodities.")
 
-    network_info = collect_network_info(instance)
-    logger.debug("Network info=%s", network_info)
-
-    graph = consturct_network(network_info)
+    graph = construct_network(network_info)
 
     flow_sum = {}
     for commodity in range(1, instance.info.products_no + 1):
@@ -116,9 +134,10 @@ def collect_network_info(instance: Instance):
     capacities = collect_capacities(instance)
     sources, destinations = collect_sources_destinations(instance)
 
-    sources, destinations, capacities, lcm = _normalize_to_whole_numbers(
-        capacities, destinations, sources
-    )
+    # sources, destinations, capacities, lcm = _normalize_to_whole_numbers(
+    #    capacities, destinations, sources
+    # )
+    lcm = 1
 
     network_info = NetworkInfo(sources, destinations, capacities, lcm)
 
@@ -178,17 +197,18 @@ def _normalize_to_whole_numbers(capacities, destinations, sources):
     return sources, destinations, capacities, lcm
 
 
-def consturct_network(network_info):
+def construct_network(network_info):
     """ Construct network graph given network info """
 
     graph = nx.DiGraph()
 
-    for (from_node, to_node) in network_info.capacities:
-        capacity = network_info.capacities[(from_node, to_node)]
-        if capacity is not None:
-            graph.add_edge(from_node, to_node, capacity=capacity)
-        else:
-            graph.add_edge(from_node, to_node)
+    for from_node in network_info.capacities:
+        for to_node in network_info.capacities[from_node]:
+            capacity = network_info.capacities[from_node][to_node]
+            if capacity is not None:
+                graph.add_edge(from_node, to_node, capacity=capacity)
+            else:
+                graph.add_edge(from_node, to_node)
 
     for source in network_info.sources:
         for commodity in network_info.sources[source]:
@@ -256,7 +276,8 @@ def _collect_capacities(instance: Instance):
                 else individual_capacity
             )
 
-        capacities[(from_node, to_node)] = (mutual, capacity)
+        to_dict = capacities.setdefault(from_node, {})
+        to_dict[to_node] = (mutual, capacity)
 
     return capacities
 
@@ -267,16 +288,17 @@ def _merge_capacity_with_mutual(capacities):
     logger = logging.getLogger(__name__)
     logger.debug("Merging capacities with mutual capacities ...")
 
-    for key in capacities:
-        mutual, total = capacities[key]
-        final_capacity = (
-            max(mutual, total)
-            if mutual is not None and total is not None
-            else total
-        )
-        logger.debug("%s: %s", key, final_capacity)
+    for u in capacities:
+        for v in capacities[u]:
+            mutual, total = capacities[u][v]
+            final_capacity = (
+                max(mutual, total)
+                if mutual is not None and total is not None
+                else total
+            )
+            logger.debug("%s: %s", (u, v), final_capacity)
 
-        capacities[key] = final_capacity
+            capacities[u][v] = final_capacity
 
 
 def collect_sources_destinations(instance: Instance):
