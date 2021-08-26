@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, MutableMapping, Sequence, Dict
 
 import numpy as np
-from mcf_simplex_analyzer.fractionarray import FractionArray
+from mcf_simplex_analyzer.fractionarray._fractionarray import FractionArray
 
 
 SUPPORTED_INSTANCES = ("mnetgen", "pds", "planar", "grid", "jlf")
