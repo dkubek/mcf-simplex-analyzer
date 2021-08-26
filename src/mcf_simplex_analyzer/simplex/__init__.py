@@ -4,10 +4,10 @@ from mcf_simplex_analyzer.simplex.decision_rules import (
     Bland,
     Lexicographic,
 )
-from mcf_simplex_analyzer.simplex.simplex import (
+from mcf_simplex_analyzer.simplex._standard_simplex import (
     LPFormulation,
     LPFormType,
-    Simplex,
+    StandardSimplex,
 )
 
 DECISION_RULES = {
@@ -24,5 +24,5 @@ __all__ = [
     "DantzigAux",
     "LPFormulation",
     "LPFormType",
-    "Simplex",
+    "StandardSimplex",
 ]

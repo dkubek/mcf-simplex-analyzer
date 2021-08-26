@@ -55,7 +55,7 @@ def _validate_formulation(formulation):
 
 
 @attr.s(kw_only=True)
-class Simplex:
+class StandardSimplex:
     table = attr.ib()
     _objective_row = attr.ib()
 
@@ -76,7 +76,7 @@ class Simplex:
             formulation (LPFormulation): The formulation of the problem
 
         Returns:
-            Simplex: Instance of the simplex algorithm ready for solving.
+            StandardSimplex: Instance of the simplex algorithm ready for solving.
 
         """
 
@@ -241,7 +241,7 @@ class Simplex:
             formulation (LPFormulation): The formulation of the problem
 
         Returns:
-            Simplex: Instance of the simplex algorithm ready for solving.
+            StandardSimplex: Instance of the simplex algorithm ready for solving.
 
         """
 
@@ -269,7 +269,7 @@ class Simplex:
             ValueError: If the input formulation is invalid.
 
         Returns:
-            (Simplex): An instance of the simplex algorithm for the given
+            (StandardSimplex): An instance of the simplex algorithm for the given
             problem.
 
         """
@@ -348,7 +348,7 @@ class Simplex:
 
             # Determine the entering variable
             entering = decision_rule.entering(self)
-            #if entering is None:
+            # if entering is None:
             #    logger.info("Success, no entering variable")
             #    return {"result": "success", **self.state()}
 
