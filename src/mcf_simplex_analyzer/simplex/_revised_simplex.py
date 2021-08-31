@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """ The revised simplex method """
 
+import time
+import logging
 import fractions
 
 from typing import Union
@@ -180,6 +182,34 @@ class LPResult:
     value: Union[fractions.Fraction, None] = attr.ib(default=None)
 
 
+def _is_unbounded(d):
+    return np.all(d <= 0)
+
+
+def _determine_leaving(p, d):
+    positive = np.where(d > 0)[0]
+
+    bounds = p[positive] / d[positive]
+    valid = np.where(bounds >= 0)[0]
+    arg_min_bound = valid[bounds[valid].argmin()]
+
+    min_bound = bounds[arg_min_bound]
+    leaving_index = positive[arg_min_bound]
+
+    return leaving_index, min_bound
+
+
+def _determine_entering(obj):
+    valid_entering = np.where(obj > 0)[0]
+
+    if valid_entering.size == 0:
+        return None
+
+    entering_index = valid_entering[obj[valid_entering].argmax()]
+
+    return entering_index
+
+
 @attr.s(kw_only=True)
 class RevisedSimplex:
     table: fas.FractionCSCMatrix = attr.ib()
@@ -193,19 +223,13 @@ class RevisedSimplex:
     _base_values: fa.FractionArray = attr.ib(default=None)
 
     @classmethod
-    def _formulate_two_phase(cls, formulation):
-        """ Instantiate the simplex algorithm using two phase approach. """
-
-        raise NotImplementedError("two phase not implemented")
-
-    @classmethod
     def instantiate(cls, model: LPModel):
 
         base_indices = np.empty(len(model.constraints), dtype=np.int64)
         constraints_need_artificial_variables = []
 
         cols, rows, data = [], [], []
-        b = fa.zeros(len(model.constraints))
+        right_hand_side = fa.zeros(len(model.constraints))
         for row, constraint in enumerate(model.constraints):
             if constraint.type == InequalityType.GE:
                 constraint = -constraint
@@ -225,7 +249,7 @@ class RevisedSimplex:
             elif constraint.type == InequalityType.EQ:
                 constraints_need_artificial_variables.append(row)
 
-            b[row] = constraint.right_hand_side
+            right_hand_side[row] = constraint.right_hand_side
             for fv in constraint.combination:
                 cols.append(fv.var.index)
                 rows.append(row)
@@ -243,9 +267,12 @@ class RevisedSimplex:
         )
         table = fas.coo_to_csc(table_coo)
 
+        objective = fa.zeros(shape[1])
+        for fv in model.objective_function:
+            objective[fv.var.index] = fv.factor
+
         base = np.zeros(model.variable_no, dtype=bool)
 
-        print("base_indices", base_indices)
         artificial_no = len(constraints_need_artificial_variables)
         if artificial_no > 0:
             artificial_table = fas.FractionCOOMatrix(
@@ -268,9 +295,6 @@ class RevisedSimplex:
                 dtype=np.int64,
             )
 
-            print("base_indices final", base_indices)
-            print()
-
             artificial_base = np.zeros(
                 model.variable_no + artificial_no, dtype=bool
             )
@@ -281,7 +305,7 @@ class RevisedSimplex:
 
             phase_one = RevisedSimplex(
                 table=artificial_table,
-                right_hand_side=b,
+                right_hand_side=right_hand_side,
                 objective_function=artificial_objective,
                 base=artificial_base,
             )
@@ -301,20 +325,21 @@ class RevisedSimplex:
         else:
             base[base_indices] = True
 
-        c = fa.zeros(shape[1])
-        for fv in model.objective_function:
-            c[fv.var.index] = fv.factor
-
         return RevisedSimplex(
-            table=table, right_hand_side=b, objective_function=c, base=base
+            table=table,
+            right_hand_side=right_hand_side,
+            objective_function=objective,
+            base=base,
         )
 
-    def solve(
-        self,
-        refactorization_period=25,
-    ):
+    def solve(self, refactorization_period=25):
+
+        logger = logging.getLogger(__name__)
+        logger.info("Starting the revised simplex algorithm.")
+        logger.debug("refactorization_period=%d", refactorization_period)
 
         if not self.is_feasible:
+            logger.info("Problem is infeasible")
             return LPResult(status="infeasible")
 
         m = self.table.shape[0]
@@ -322,32 +347,31 @@ class RevisedSimplex:
 
         eta_file = self._refactorize_base(base_table)
 
-        # Compute the basic feasible solution
-        self._base_values = eta_file.ftran(self.right_hand_side)
-        print("p: ", self._base_values)
-
         iteration_count = 0
         while True:
-            print(iteration_count)
+            if iteration_count % 100 == 0:
+                logger.info("\nIteration: %d", iteration_count)
+            else:
+                logger.debug("\nIteration: %d", iteration_count)
+
             if len(eta_file.file) > refactorization_period:
                 eta_file = self._refactorize_base(base_table)
 
-                # Compute the basic feasible solution
-                self._base_values = eta_file.ftran(self.right_hand_side)
-                print("p: ", self._base_values)
-
             y = eta_file.btran(self.objective_function[self._base_indices])
-            print("y:", y)
+            logger.debug("y= %s", y)
 
             # Compute objective function
-            obj = self._compute_objective(y)
-            print("obj:", obj)
+            nonbasic_objective = self._compute_objective(y)
+            logger.debug("nonbasic_objective= %s", nonbasic_objective)
 
             # Determine entering
-            entering_index = self._determine_entering(obj)
+            entering_index = _determine_entering(nonbasic_objective)
+            logger.debug("entering_index= %s", entering_index)
 
             if entering_index is None:
-                print(self._base_values)
+                logger.info("Optimal solution found.")
+                logger.info("%s", self._base_values)
+
                 return LPResult(
                     status="success",
                     value=fa.dot(
@@ -357,80 +381,64 @@ class RevisedSimplex:
                 )
 
             entering = self._nonbase_indices[entering_index]
-            print("entering_index", entering_index, "entering", entering)
+            logger.debug("Entering= %d", entering)
 
             # Determine entering column
-            # TODO: Return vector when selecting one column
-            a = fas.csc_to_dense(
+            entering_column = fas.csc_to_dense(
                 fas.csc_select_columns(self.table, [entering])
             )[:, 0]
-            print("a", a)
+            logger.debug("Entering column= %s", entering_column)
 
-            print(eta_file)
-            d = eta_file.ftran(a)
-            print("d", d)
+            d = eta_file.ftran(entering_column)
+            logger.debug("d= %s", d)
 
-            if np.all(d <= 0):
-                print("Unbounded")
+            if _is_unbounded(d):
+                logger.info("Problem is unbounded")
                 return LPResult(status="unbounded")
 
             # Determine leaving
-            leaving_index, min_bound = self._determine_leaving(d)
-
+            leaving_index, min_bound = _determine_leaving(self._base_values, d)
             leaving = self._base_indices[leaving_index]
-            print("leaving_index", leaving_index, "leaving", leaving)
+            logger.debug("leaving_index= %d", leaving_index)
+            logger.debug("leaving= %d", leaving)
+            logger.debug("min_bound= %s", min_bound)
 
-            # Change basis
             self._update_basis(
                 entering, entering_index, leaving, leaving_index
             )
 
+            # Update optimal solution
             self._base_values -= min_bound * d
             self._base_values[leaving_index] = min_bound
-            # self._base_values = eta_file.ftran(self.right_hand_side)
-            print("p", self._base_values)
+            logger.debug(
+                "Solution for the current basis: %s ", self._base_values
+            )
 
-            # Update eta file
+            # Update the eta file
             eta = EtaSolver(index=leaving_index, column=d)
             eta_file.extend(eta)
 
             iteration_count += 1
 
-            print()
-
     def _update_basis(self, entering, entering_index, leaving, leaving_index):
+
+        logger = logging.getLogger(__name__)
+        logger.debug("Updating base")
+
         self.base[entering] = True
         self.base[leaving] = False
-        print("base:", self.base)
+        logger.debug("base= %s", self.base)
 
         self._base_indices[leaving_index] = entering
         self._nonbase_indices[entering_index] = leaving
-        print("base_ind", self._base_indices)
-        print("nonbase_ind", self._nonbase_indices)
-
-    def _determine_leaving(self, d):
-        positive = np.where(d > 0)[0]
-
-        bounds = self._base_values[positive] / d[positive]
-        valid = np.where(bounds >= 0)[0]
-        arg_min_bound = valid[bounds[valid].argmin()]
-
-        min_bound = bounds[arg_min_bound]
-        leaving_index = positive[arg_min_bound]
-
-        return leaving_index, min_bound
-
-    def _determine_entering(self, obj):
-        valid_entering = np.where(obj > 0)[0]
-
-        if valid_entering.size == 0:
-            return None
-
-        entering_index = valid_entering[obj[valid_entering].argmax()]
-
-        return entering_index
+        logger.debug("base_indices= %s", self._base_indices)
+        logger.debug("nonbase_indices= %s", self._nonbase_indices)
 
     def _refactorize_base(self, base_table):
+
+        logger = logging.getLogger(__name__)
+        logger.info("Refactorizing base...")
+        tic = time.perf_counter()
 
         self._base_indices = np.where(self.base)[0]
         self._nonbase_indices = np.where(~self.base)[0]
@@ -447,12 +455,17 @@ class RevisedSimplex:
         eta_file = EtaFile()
         eta_file.extend(PLUSolver(lu=lu, perm=perm))
 
+        toc = time.perf_counter()
+        logger.info("Base refactorized. Time: %s", toc - tic)
+
+        # Compute the basic feasible solution
+        self._base_values = eta_file.ftran(self.right_hand_side)
+
         return eta_file
 
     def _compute_objective(self, y):
 
-        # TODO: empty?
-        tmp = fa.zeros(len(self._nonbase_indices))
+        tmp = fa.empty(len(self._nonbase_indices))
         for i, col in enumerate(self._nonbase_indices):
             start, end = self.table.indptr[col], self.table.indptr[col + 1]
             tmp[i] = sum(

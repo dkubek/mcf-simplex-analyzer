@@ -180,8 +180,6 @@ def csc_select_columns(csc: FractionCSCMatrix, columns):
         index += csc.indptr[col + 1] - csc.indptr[col]
     indptr[n] = index
 
-    print(indptr)
-
     indices = np.empty(index, dtype=np.int64)
     data = fa.empty(index)
 
@@ -192,9 +190,6 @@ def csc_select_columns(csc: FractionCSCMatrix, columns):
         indices[index : index + diff] = csc.indices[start:end]
         data[index : index + diff] = csc.data[start:end]
         index += diff
-
-    print(indices)
-    print(data)
 
     return FractionCSCMatrix(
         shape=(m, n), indptr=indptr, indices=indices, data=data
