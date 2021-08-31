@@ -11,8 +11,6 @@ import numpy as np
 from scipy.sparse.sputils import isintlike
 
 
-
-
 def is_integral_array(x):
     """
     Check whether ``x`` is a numpy array containing integral values.

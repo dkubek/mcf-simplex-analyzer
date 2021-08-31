@@ -4,12 +4,57 @@ import numpy as np
 from mcf_simplex_analyzer.fractionarray._fractionarray import FractionArray
 
 
+def empty(shape, dtype=np.int64):
+    """
+    Return a new FractionArray of given shape and type, without initializing
+    entries.
+
+    Args:
+        shape (tuple of ints, int): Shape of the new array.
+        dtype (dtype_like):
+            The desired data-type for the array. (default: numpy.int64)
+
+    Returns:
+        FractionArray: A newly created array.
+
+    """
+
+    return FractionArray(
+        numerator=np.empty(shape, dtype=dtype),
+        denominator=np.empty(shape, dtype=dtype),
+        _normalize=False,
+    )
+
+
+def empty_like(fa, shape=None):
+    """
+    Return an empty FractionArray with shape and type of input.
+
+    Args:
+        fa (FractionArray):
+            Return an array of zeros with the same shape and type as fa given
+            array.
+        shape:
+            Overrides the shape of the result.
+
+    Returns:
+        FractionArray: Array of zeros with the same shape and type as fa.
+
+    """
+
+    return FractionArray(
+        numerator=np.empty_like(fa.numerator, shape=shape),
+        denominator=np.empty_like(fa.denominator, shape=shape),
+        _normalize=False,
+    )
+
+
 def zeros(shape, dtype=np.int64):
     """
     Return a new FractionArray of given shape and type, filled with zeros.
 
     Args:
-        shape (tuple of ints): Shape of the new array.
+        shape (tuple of ints, int): Shape of the new array.
         dtype (dtype_like):
             The desired data-type for the array. (default: numpy.int64)
 
@@ -43,6 +88,49 @@ def zeros_like(fa, shape=None):
 
     return FractionArray(
         numerator=np.zeros_like(fa.numerator, shape=shape),
+        denominator=np.ones_like(fa.denominator, shape=shape),
+    )
+
+
+def ones(shape, dtype=np.int64):
+    """
+    Return a new FractionArray of given shape and type, filled with ones.
+
+    Args:
+        shape (tuple of ints, int): Shape of the new array.
+        dtype (dtype_like):
+            The desired data-type for the array. (default: numpy.int64)
+
+    Returns:
+        FractionArray: A newly created array.
+
+    """
+
+    return FractionArray(
+        numerator=np.ones(shape, dtype=dtype),
+        denominator=np.ones(shape, dtype=dtype),
+    )
+
+
+def ones_like(fa, shape=None):
+    """
+    Return an FractionArray of ones with the same shape and type as a given
+    array.
+
+    Args:
+        fa (FractionArray):
+            Return an array of zeros with the same shape and type as fa given
+            array.
+        shape:
+            Overrides the shape of the result.
+
+    Returns:
+        FractionArray: Array of zeros with the same shape and type as fa.
+
+    """
+
+    return FractionArray(
+        numerator=np.ones_like(fa.numerator, shape=shape),
         denominator=np.ones_like(fa.denominator, shape=shape),
     )
 
