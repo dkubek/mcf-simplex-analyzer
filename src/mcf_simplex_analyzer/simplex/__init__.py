@@ -10,6 +10,11 @@ from mcf_simplex_analyzer.simplex._standard_simplex import (
     StandardSimplex,
 )
 
+from mcf_simplex_analyzer.simplex._model import LPModel, InequalityType
+
+from mcf_simplex_analyzer.simplex._revised_simplex import RevisedSimplex
+
+
 DECISION_RULES = {
     "lex": Lexicographic,
     "bland": Bland,
@@ -25,4 +30,7 @@ __all__ = [
     "LPFormulation",
     "LPFormType",
     "StandardSimplex",
+    "RevisedSimplex",
+    "LPModel",
+    "InequalityType",
 ]

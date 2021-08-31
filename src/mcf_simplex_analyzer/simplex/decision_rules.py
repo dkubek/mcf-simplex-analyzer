@@ -18,6 +18,20 @@ class SimplexDecisionRule:
         )
 
 
+def dantzig(simplex: StandardSimplex):
+    nonbasic = np.where(~simplex.base)[0]
+    positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
+
+    if positive.size == 0:
+        return None
+
+    entering = nonbasic[
+        positive[simplex.objective_fun[nonbasic][positive].argmax()]
+    ]
+
+    return entering
+
+
 class Dantzig(SimplexDecisionRule):
     @classmethod
     def entering(cls, simplex):
@@ -64,20 +78,6 @@ class DantzigAux(SimplexDecisionRule):
                         leaving_row = simplex._var_index_to_row[0]
 
         return leaving_row
-
-
-def dantzig(simplex: StandardSimplex):
-    nonbasic = np.where(~simplex.base)[0]
-    positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
-
-    if positive.size == 0:
-        return None
-
-    entering = nonbasic[
-        positive[simplex.objective_fun[nonbasic][positive].argmax()]
-    ]
-
-    return entering
 
 
 class Bland(SimplexDecisionRule):

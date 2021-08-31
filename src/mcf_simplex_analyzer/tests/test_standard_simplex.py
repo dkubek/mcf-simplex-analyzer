@@ -117,9 +117,7 @@ PROBLEMS_SUCCESS = [
 
 @pytest.mark.simplex
 @pytest.mark.parametrize("problem,expected_value", PROBLEMS_SUCCESS)
-@pytest.mark.parametrize(
-    "decision_rule", ["dantzig", "bland", "lex"]
-)
+@pytest.mark.parametrize("decision_rule", ["dantzig", "bland", "lex"])
 def test_problems(problem, expected_value, decision_rule):
     """ Test problem from canonical formulation. """
 
@@ -281,7 +279,9 @@ def test_problem_infeasible_canonical():
         objective=FractionArray.from_array([1]),
     )
 
-    result = StandardSimplex.instantiate(problem).solve(decision_rule="dantzig")
+    result = StandardSimplex.instantiate(problem).solve(
+        decision_rule="dantzig"
+    )
 
     assert result["result"] == "infeasible"
 
@@ -325,6 +325,7 @@ def test_problem_cycling_bland():
     assert result["result"] == "success"
     assert result["value"] == Fraction(1)
     assert np.all(result["variables"] >= 0)
+
 
 @pytest.mark.simplex
 def test_problem_cycling_lex():
