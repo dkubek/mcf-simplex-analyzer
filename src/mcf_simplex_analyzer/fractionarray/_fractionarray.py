@@ -8,7 +8,8 @@ from fractions import Fraction
 
 import operator
 import numpy as np
-from scipy.sparse.sputils import isintlike
+
+# from scipy.sparse.sputils import isintlike
 
 
 def is_integral_array(x):
@@ -24,6 +25,10 @@ def is_integral_array(x):
     """
 
     return isinstance(x, np.ndarray) and np.issubdtype(x.dtype, np.integer)
+
+
+def isintlike(x):
+    return is_integral_array(x) or np.issubdtype(type(x), np.integer)
 
 
 def to_array(input_iter, dtype=int):
@@ -151,7 +156,14 @@ class FractionArray:
             denominator.reshape(original_shape),
         )
 
-    def __init__(self, numerator, denominator, dtype=int, _normalize=True):
+    def __init__(
+        self,
+        numerator,
+        denominator,
+        dtype=np.int64,
+        _normalize=True,
+        _check_type=True,
+    ):
         """
         Create a new FractionArray.
 
@@ -176,10 +188,11 @@ class FractionArray:
         """
 
         if dtype is None:
-            dtype = int
+            dtype = np.int64
 
-        numerator = to_array(numerator, dtype=dtype)
-        denominator = to_array(denominator, dtype=dtype)
+        if _check_type:
+            numerator = to_array(numerator, dtype=dtype)
+            denominator = to_array(denominator, dtype=dtype)
 
         if numerator.shape != denominator.shape:
             raise ValueError(

@@ -224,6 +224,9 @@ def dot(fa: FractionArray, fb: FractionArray):
     if len(fa.shape) != 1:
         raise NotImplementedError("Only 1D array dot product is supported.")
 
-    return np.sum(
-        fa * fb, dtype=fractions.Fraction, initial=fractions.Fraction(0)
-    )
+    ans = fractions.Fraction(0)
+    mul = fa * fb
+    for i in range(fa.shape[0]):
+        ans += mul[i]
+
+    return ans

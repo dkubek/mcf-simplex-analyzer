@@ -10,7 +10,7 @@ from mcf_simplex_analyzer.simplex._standard_simplex import (
     StandardSimplex,
 )
 
-from mcf_simplex_analyzer.simplex._model import LPModel, InequalityType
+from mcf_simplex_analyzer.simplex._model import LPModel, InequalityType, lp_sum
 
 from mcf_simplex_analyzer.simplex._revised_simplex import RevisedSimplex
 
@@ -33,4 +33,5 @@ __all__ = [
     "RevisedSimplex",
     "LPModel",
     "InequalityType",
+    "lp_sum",
 ]

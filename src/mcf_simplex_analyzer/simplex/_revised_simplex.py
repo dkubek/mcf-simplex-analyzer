@@ -62,11 +62,13 @@ def _lu_solve(lu: FractionArray, x: FractionArray):
 
     # Ly = b
     for i in range(n):
-        ans[i] = x[i] - fa.dot(lu[i, :i], ans[:i])
+        nonzero = lu[i, :i] != 0
+        ans[i] = x[i] - fa.dot(lu[i, :i][nonzero], ans[:i][nonzero])
 
     # Ux = y
     for i in range(n - 1, -1, -1):
-        ans[i] -= fa.dot(lu[i, (i + 1) :], ans[(i + 1) :])
+        nonzero = lu[i, (i + 1) :] != 0
+        ans[i] -= fa.dot(lu[i, (i + 1) :][nonzero], ans[(i + 1) :][nonzero])
         ans[i] /= lu[i, i]
 
     return ans
@@ -79,12 +81,14 @@ def _lu_solve_transposed(lu: FractionArray, x: FractionArray):
 
     # U^T y = b
     for i in range(n):
-        ans[i] = x[i] - fa.dot(lu[i, :i], ans[:i])
+        nonzero = lu[i, :i] != 0
+        ans[i] = x[i] - fa.dot(lu[i, :i][nonzero], ans[:i][nonzero])
         ans[i] /= lu[i, i]
 
     # L^t x = y
     for i in range(n - 1, -1, -1):
-        ans[i] -= fa.dot(lu[i, (i + 1) :], ans[(i + 1) :])
+        nonzero = lu[i, (i + 1) :] != 0
+        ans[i] -= fa.dot(lu[i, (i + 1) :][nonzero], ans[(i + 1) :][nonzero])
 
     return ans
 
@@ -124,13 +128,13 @@ class PLUSolver(Solver):
             raise ValueError("matrix must be square")
 
     def ftran(self, b: FractionArray):
+        return _lu_solve(self.lu, b[self.perm])
+
+    def btran(self, b: FractionArray):
         if self._perm_trans is None:
             self._perm_trans = _inverse_permutation(self.perm)
 
-        return _lu_solve(self.lu, b)[self._perm_trans]
-
-    def btran(self, b: FractionArray):
-        return _lu_solve_transposed(self.lu.T, b[self.perm])
+        return _lu_solve_transposed(self.lu.T, b)[self._perm_trans]
 
 
 @attr.s
@@ -162,16 +166,27 @@ class EtaFile:
         self.file.append(solver)
 
     def ftran(self, b: FractionArray):
+        tic = time.perf_counter()
+
         tmp = b.copy()
         for solver in self.file:
             tmp = solver.ftran(tmp)
 
+        toc = time.perf_counter()
+
+        print("Ftran time", toc - tic)
+
         return tmp
 
     def btran(self, b: FractionArray):
+        tic = time.perf_counter()
+
         tmp = b.copy()
         for solver in reversed(self.file):
             tmp = solver.btran(tmp)
+
+        toc = time.perf_counter()
+        print("Btran time", toc - tic)
 
         return tmp
 
@@ -188,9 +203,14 @@ def _is_unbounded(d):
 
 def _determine_leaving(p, d):
     positive = np.where(d > 0)[0]
+    print("positive", positive)
 
+    print("p[positive]", p[positive])
+    print("d[positive]", d[positive])
     bounds = p[positive] / d[positive]
+    print("bounds", bounds)
     valid = np.where(bounds >= 0)[0]
+    print("valid", valid)
     arg_min_bound = valid[bounds[valid].argmin()]
 
     min_bound = bounds[arg_min_bound]
@@ -247,6 +267,9 @@ class RevisedSimplex:
                     base_indices[row] = slack.index
 
             elif constraint.type == InequalityType.EQ:
+                if constraint.right_hand_side < 0:
+                    constraint = -constraint
+
                 constraints_need_artificial_variables.append(row)
 
             right_hand_side[row] = constraint.right_hand_side
@@ -299,9 +322,12 @@ class RevisedSimplex:
                 model.variable_no + artificial_no, dtype=bool
             )
             artificial_base[base_indices] = True
+            print("abase", artificial_base, flush=True)
 
             artificial_objective = fa.zeros(model.variable_no + artificial_no)
             artificial_objective[-artificial_no:] = -1
+            print("aobj", artificial_objective, flush=True)
+            print("arhs", right_hand_side)
 
             phase_one = RevisedSimplex(
                 table=artificial_table,
@@ -310,9 +336,10 @@ class RevisedSimplex:
                 base=artificial_base,
             )
 
+            #return phase_one
             ans = phase_one.solve()
 
-            if ans.status != "success" or ans.value > 0:
+            if ans.status != "success" or ans.value < 0:
                 phase_one.is_feasible = False
                 return phase_one
 
@@ -357,10 +384,14 @@ class RevisedSimplex:
             if len(eta_file.file) > refactorization_period:
                 eta_file = self._refactorize_base(base_table)
 
+            if np.any(self._base_values < 0):
+                print("base values", self._base_values)
+                raise ValueError("Variable negative")
+
+            # Compute objective function
             y = eta_file.btran(self.objective_function[self._base_indices])
             logger.debug("y= %s", y)
 
-            # Compute objective function
             nonbasic_objective = self._compute_objective(y)
             logger.debug("nonbasic_objective= %s", nonbasic_objective)
 
@@ -370,15 +401,16 @@ class RevisedSimplex:
 
             if entering_index is None:
                 logger.info("Optimal solution found.")
-                logger.info("%s", self._base_values)
 
-                return LPResult(
-                    status="success",
-                    value=fa.dot(
-                        self._base_values,
-                        self.objective_function[self._base_indices],
-                    ),
+                optimum = fa.dot(
+                    self._base_values,
+                    self.objective_function[self._base_indices],
                 )
+
+                logger.info("base values: %s", self._base_values)
+                logger.info("optimum: %s", optimum)
+
+                return LPResult(status="success", value=optimum)
 
             entering = self._nonbase_indices[entering_index]
             logger.debug("Entering= %d", entering)
@@ -407,16 +439,24 @@ class RevisedSimplex:
                 entering, entering_index, leaving, leaving_index
             )
 
-            # Update optimal solution
-            self._base_values -= min_bound * d
-            self._base_values[leaving_index] = min_bound
-            logger.debug(
-                "Solution for the current basis: %s ", self._base_values
-            )
-
             # Update the eta file
             eta = EtaSolver(index=leaving_index, column=d)
             eta_file.extend(eta)
+
+            # Update optimal solution
+            # self._base_values -= min_bound * d
+            # self._base_values[leaving_index] = min_bound
+            self._base_values = eta_file.ftran(self.right_hand_side)
+            optimum = fa.dot(
+                self._base_values,
+                self.objective_function[self._base_indices],
+            )
+
+            logger.info("base values: %s", self._base_values)
+            logger.info("optimum: %s", optimum)
+            logger.debug(
+                "Solution for the current basis: %s ", self._base_values
+            )
 
             iteration_count += 1
 
@@ -438,18 +478,31 @@ class RevisedSimplex:
 
         logger = logging.getLogger(__name__)
         logger.info("Refactorizing base...")
+        print("*" * 80, flush=True)
         tic = time.perf_counter()
 
         self._base_indices = np.where(self.base)[0]
         self._nonbase_indices = np.where(~self.base)[0]
+        print("base ind", self._base_indices)
 
         fas.csc_to_dense(
             fas.csc_select_columns(self.table, self._base_indices),
             out=base_table,
         )
 
+        print(self.table)
+        print(
+            "real",
+            fas.csc_to_dense(
+                fas.csc_select_columns(self.table, self._base_indices),
+            ),
+        )
+
+        print(base_table)
+
         # Factorize the basis
         perm, lu = lu_factor(base_table, inplace=True)
+        print(lu)
 
         # Initialize the eta file
         eta_file = EtaFile()

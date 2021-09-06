@@ -2,7 +2,7 @@
 """ Tests for Simplex. """
 
 import numbers
-from typing import List
+from typing import List, Union
 from enum import Enum
 
 import attr
@@ -108,6 +108,28 @@ class FactorVar:
 class LinearCombination:
     combination: List[FactorVar] = attr.ib(factory=list)
 
+    def normalize(self):
+        self.combination.sort(key=lambda fv: fv.var.index)
+
+        new_combination = []
+        tmp = None
+        for fv in self.combination:
+            if tmp is None:
+                tmp = fv
+                continue
+
+            if fv.var.index == tmp.var.index:
+                tmp.factor += fv.factor
+                continue
+
+            new_combination.append(tmp)
+            tmp = fv
+
+        if tmp is not None:
+            new_combination.append(tmp)
+
+        self.combination = new_combination
+
     def __add__(self, other):
         """ Returns self + other. """
 
@@ -176,8 +198,8 @@ class LinearCombination:
         return self.add_variable(other, factor=-1)
 
     def add_linear_combination(self, other: "LinearCombination"):
-        self.combination.sort(key=lambda fv: fv.var.index)
-        other.combination.sort(key=lambda fv: fv.var.index)
+        self.normalize()
+        other.normalize()
 
         new_combination = []
         i = 0
@@ -260,6 +282,28 @@ class LinearCombination:
 
     def __iter__(self):
         return self.combination.__iter__()
+
+
+def lp_sum(
+    expressions: Union[Variable, FactorVar, LinearCombination]
+) -> LinearCombination:
+
+    out = LinearCombination()
+    for expression in expressions:
+        if isinstance(expression, Variable):
+            out.combination.append(FactorVar(1, expression))
+        elif isinstance(expression, FactorVar):
+            out.combination.append(expression)
+        elif isinstance(expression, LinearCombination):
+            out.combination.extend(expression.combination)
+        else:
+            ValueError(
+                "Value of type {} is not valid for summation.".format(
+                    expression
+                )
+            )
+
+    return out
 
 
 class InequalityType(Enum):
