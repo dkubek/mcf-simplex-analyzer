@@ -6,10 +6,9 @@ FractionArray is an array of fractions.
 
 from fractions import Fraction
 
-import operator
 import numpy as np
 
-# from scipy.sparse.sputils import isintlike
+from gmpy2 import mpq
 
 
 def is_integral_array(x):
@@ -76,14 +75,11 @@ class FractionArray:
     denominators. It defines a similar interface to numpy arrays and supports
     all basic arithmetic operations.
 
-    Attributes:
-        numerator: An array of numerators.
-        denominator: An array of denominators
-
     """
 
-    numerator: np.ndarray
-    denominator: np.ndarray
+    # numerator: np.ndarray
+    # denominator: np.ndarray
+    data: np.ndarray
 
     @classmethod
     def from_array(cls, input_values):
@@ -121,9 +117,6 @@ class FractionArray:
 
         """
 
-        if is_integral_array(input_values):
-            return cls(input_values, np.ones_like(input_values))
-
         # Test input is iterable
         try:
             iter(input_values)
@@ -135,92 +128,30 @@ class FractionArray:
         original_shape = np.shape(input_values)
         size = np.size(input_values)
 
-        numerator, denominator = np.empty(size, dtype=int), np.empty(
-            size, dtype=int
-        )
+        data = np.empty(size, dtype=object)
         for i, val in enumerate(np.ravel(input_values)):
-            if isinstance(val, Fraction):
-                numerator[i] = val.numerator
-                denominator[i] = val.denominator
+            if isinstance(val, (Fraction, mpq)):
+                data[i] = mpq(int(val.numerator), int(val.denominator))
                 continue
 
             if np.issubdtype(type(val), np.integer):
-                numerator[i] = val
-                denominator[i] = 1
+                data[i] = mpq(int(val))
                 continue
 
-            raise TypeError("Invalid value: {}".format(val))
-
-        return cls(
-            numerator.reshape(original_shape),
-            denominator.reshape(original_shape),
-        )
-
-    def __init__(
-        self,
-        numerator,
-        denominator,
-        dtype=np.int64,
-        _normalize=True,
-        _check_type=True,
-    ):
-        """
-        Create a new FractionArray.
-
-        Args:
-            numerator (array_like): Array of numerators
-            denominator (array_like): Array of denominators
-            dtype (dtype_like):
-                An integral datatype of the internal representation.
-                (default: int)
-            _normalize (bool): Whether to normalize the input. (default: True)
-
-        Warnings:
-            When ``numerator`` or ``denominator`` are numpy arrays a reference
-            is kept instead of copying.
-
-        Raises:
-            ValueError: When the input iterable cannot be converted or is
-            invalid.
-
-        Raises:
-
-        """
-
-        if dtype is None:
-            dtype = np.int64
-
-        if _check_type:
-            numerator = to_array(numerator, dtype=dtype)
-            denominator = to_array(denominator, dtype=dtype)
-
-        if numerator.shape != denominator.shape:
-            raise ValueError(
-                "Different numerator and denominator shapes {} vs {}".format(
-                    numerator.shape, denominator.shape
-                )
+            raise TypeError(
+                "Invalid value: {} of type {}".format(val, type(val))
             )
 
-        self.numerator = numerator
-        self.denominator = denominator
+        return cls(data.reshape(original_shape))
 
-        self.shape = self.numerator.shape
-        self.size = self.numerator.size
+    def __init__(self, data):
 
-        if _normalize:
-            self.normalize()
+        assert isinstance(data, np.ndarray)
 
-    def normalize(self):
-        """ Convert the array to a normalized form. """
-
-        gcds = np.gcd(self.numerator, self.denominator)
-
-        neg_ans = np.logical_xor(self.numerator < 0, self.denominator < 0)
-
-        self.numerator = abs(self.numerator) // gcds
-        self.denominator = abs(self.denominator) // gcds
-
-        self.numerator[neg_ans] *= -1
+        self.data = data
+        self.shape = data.shape
+        self.size = data.size
+        self.dtype = mpq
 
     def min(self, axis=None, eps=1e-6):
         """
@@ -240,9 +171,7 @@ class FractionArray:
 
         """
 
-        return self[
-            np.unravel_index(self.argmin(axis=axis, eps=eps), self.shape)
-        ]
+        return self.data.min(axis=axis)
 
     def max(self, axis=None, eps=1e-6):
         """
@@ -262,25 +191,7 @@ class FractionArray:
 
         """
 
-        return self[
-            np.unravel_index(self.argmax(axis=axis, eps=eps), self.shape)
-        ]
-
-    def _arg_min_or_max(self, arg_ext_fun, ext_fun, axis=None, eps=1e-6):
-        floats = np.true_divide(self.numerator, self.denominator)
-        float_extreme = ext_fun(floats)
-
-        valid = np.where(
-            (floats <= float_extreme + eps) & (floats >= float_extreme - eps)
-        )[0]
-
-        lcm = np.lcm.reduce(self.denominator[valid], initial=1)
-        return valid[
-            arg_ext_fun(
-                (lcm // self.denominator[valid]) * self.numerator[valid],
-                axis=axis,
-            )
-        ]
+        return self.data.max(axis=axis)
 
     def argmin(self, axis=None, eps=1e-6):
         """
@@ -306,7 +217,7 @@ class FractionArray:
 
         """
 
-        return self._arg_min_or_max(np.argmin, np.min, axis=axis, eps=eps)
+        return self.data.argmin(axis=axis)
 
     def argmax(self, axis=None, eps=1e-6):
         """
@@ -318,7 +229,7 @@ class FractionArray:
 
         """
 
-        return self._arg_min_or_max(np.argmax, np.max, axis=axis, eps=eps)
+        return self.data.argmax(axis=axis)
 
     def reshape(self, *args, **kwargs):
         """
@@ -329,214 +240,86 @@ class FractionArray:
 
         """
 
-        return FractionArray(
-            self.numerator.reshape(*args, **kwargs),
-            self.denominator.reshape(*args, **kwargs),
-        )
+        return FractionArray(self.data.reshape(*args, **kwargs))
 
     def resize(self, shape):
         raise NotImplementedError("Resizing not supported.")
 
     def copy(self):
-        return FractionArray(
-            self.numerator.copy(), self.denominator.copy(), _normalize=False
-        )
+        return FractionArray(self.data.copy())
 
     def __abs__(self):
         """ Return abs(self). """
 
-        return FractionArray(abs(self.numerator), self.denominator.copy())
-
-    def _comparison(self, other, compare):
-        """
-        Compare to ``other`` using a comparison function ``compare``.
-
-        Args:
-            other: Value to compare to.
-            compare: Comparison function. (For example from the ``operators``
-                     library.)
-
-        Returns:
-            (bool or array of bool): Array of boolean values of the same
-            shape as the FractionArray shape.
-
-        """
-
-        # Quickly compare the sign
-        if np.all(other == 0):
-            return compare(self.numerator, other)
-
-        if isinstance(other, FractionArray):
-            return compare(
-                self.numerator * other.denominator,
-                other.numerator * self.denominator,
-            )
-
-        return compare(self.numerator, other * self.denominator)
+        return FractionArray(abs(self.data))
 
     def __eq__(self, other):
         """ Returns self == other. """
 
-        return self._comparison(other, operator.eq)
+        return self.data.__eq__(other)
 
     def __ne__(self, other):
         """ Returns self != other. """
 
-        return self._comparison(other, operator.ne)
+        return self.data.__ne__(other)
 
     def __lt__(self, other):
         """ Returns self < other. """
 
-        return self._comparison(other, operator.lt)
+        return self.data.__lt__(other)
 
     def __gt__(self, other):
         """ Returns self > other. """
 
-        return self._comparison(other, operator.gt)
+        return self.data.__gt__(other)
 
     def __le__(self, other):
         """ Returns self <= other. """
 
-        return self._comparison(other, operator.le)
+        return self.data.__le__(other)
 
     def __ge__(self, other):
         """ Returns self >= other. """
 
-        return self._comparison(other, operator.ge)
-
-    def _add_fractional(self, f):
-        return FractionArray(
-            self.numerator * f.denominator + self.denominator * f.numerator,
-            self.denominator * f.denominator,
-        )
-
-    def _add_integral(self, x):
-        return FractionArray(
-            self.numerator + x * self.denominator,
-            self.denominator.copy(),
-        )
+        return self.data.__ge__(other)
 
     def __add__(self, other):
         """ Returns self + other. """
 
-        if isintlike(other) and other == 0:
-            return self.copy()
-
-        return _perform_op(
-            other,
-            self._add_fractional,
-            self._add_integral,
-            opname="addition",
-        )
+        return FractionArray(self.data.__add__(other))
 
     def __radd__(self, other):
         """ Returns other + self. """
 
-        return self.__add__(other)
-
-    def _sub_fractional(self, f):
-        return FractionArray(
-            self.numerator * f.denominator - self.denominator * f.numerator,
-            self.denominator * f.denominator,
-        )
-
-    def _sub_integral(self, x):
-        return FractionArray(
-            self.numerator - x * self.denominator,
-            self.denominator.copy(),
-        )
+        return FractionArray(self.data.__radd__(other))
 
     def __sub__(self, other):
         """ Returns self - other. """
 
-        if isintlike(other) and other == 0:
-            return self.copy()
-
-        return _perform_op(
-            other,
-            self._sub_fractional,
-            self._sub_integral,
-            opname="subtraction (left)",
-        )
-
-    def _rsub_fractional(self, f):
-        return FractionArray(
-            self.denominator * f.numerator - self.numerator * f.denominator,
-            self.denominator * f.denominator,
-        )
-
-    def _rsub_integral(self, x):
-        return FractionArray(
-            x * self.denominator - self.numerator,
-            self.denominator.copy(),
-        )
+        return FractionArray(self.data.__sub__(other))
 
     def __rsub__(self, other):  # other - self
         """ Returns other - self. """
 
-        if isintlike(other) and other == 0:
-            return -self.copy()
-
-        return _perform_op(
-            other,
-            self._rsub_fractional,
-            self._rsub_integral,
-            opname="subtraction (right)",
-        )
+        return self.data.__rsub__(other)
 
     def __neg__(self):
         """ Returns -self. """
 
-        return FractionArray(
-            -self.numerator.copy(), self.denominator.copy(), _normalize=False
-        )
-
-    def _mul_fractional(self, f):
-        return FractionArray(
-            self.numerator * f.numerator, self.denominator * f.denominator
-        )
-
-    def _mul_integral(self, x):
-        return FractionArray(x * self.numerator, self.denominator.copy())
+        return FractionArray(-self.data)
 
     def __mul__(self, other):
         """ Returns self * other. """
 
-        if isintlike(other) and other == 1:
-            return self.copy()
-
-        return _perform_op(
-            other,
-            self._mul_fractional,
-            self._mul_integral,
-            opname="multiplication",
-        )
+        return FractionArray(self.data.__mul__(other))
 
     def __rmul__(self, other):
         """ Returns other * self. """
 
-        return self.__mul__(other)
-
-    def _div_fractional(self, f):
-        return FractionArray(
-            self.numerator * f.denominator, self.denominator * f.numerator
-        )
-
-    def _div_integral(self, x):
-        return FractionArray(self.numerator, self.denominator * x)
+        return FractionArray(self.data.__rmul__(other))
 
     def __div__(self, other):
-        """ Returns self // other. """
-
-        if isintlike(other) and other == 1:
-            return self.copy()
-
-        return _perform_op(
-            other,
-            self._div_fractional,
-            self._div_integral,
-            opname="division",
-        )
+        return FractionArray(self.data / other)
 
     def __floordiv__(self, other):
         """ Returns self // other. """
@@ -548,109 +331,20 @@ class FractionArray:
 
         return self.__div__(other)
 
-    def _iadd_fractional(self, f):
-        self.numerator = (
-            self.numerator * f.denominator + self.denominator * f.numerator
-        )
-        self.denominator = self.denominator * f.denominator
-
-        self.normalize()
-
-        return self
-
-    def _iadd_integral(self, x):
-        self.numerator = self.numerator + x * self.denominator
-
-        self.normalize()
-
-        return self
-
     def __iadd__(self, other):
         """ Add other to self in-place. """
-
-        if isintlike(other) and other == 0:
-            return self
-
-        return _perform_op(
-            other,
-            self._iadd_fractional,
-            self._iadd_integral,
-            opname="in-place addition",
-        )
-
-    def _isub_fractional(self, f):
-        self.numerator = (
-            self.numerator * f.denominator - self.denominator * f.numerator
-        )
-        self.denominator = self.denominator * f.denominator
-
-        self.normalize()
-
-        return self
-
-    def _isub_integral(self, x):
-        self.numerator = self.numerator - x * self.denominator
-
-        self.normalize()
-
+        self.data = self.data.__iadd__(other)
         return self
 
     def __isub__(self, other):
         """ Subtract other from self in-place. """
-
-        if isintlike(other) and other == 0:
-            return self
-
-        return _perform_op(
-            other,
-            self._isub_fractional,
-            self._isub_integral,
-            opname="in-place subtraction",
-        )
-
-    def _imul_fractional(self, f):
-        self.numerator = self.numerator * f.numerator
-        self.denominator = self.denominator * f.denominator
-
-        self.normalize()
-
-        return self
-
-    def _imul_integral(self, x):
-        new_numerator = x * self.numerator
-        self.numerator = new_numerator
-
-        self.normalize()
-
+        self.data = self.data.__isub__(other)
         return self
 
     def __imul__(self, other):
         """ Multiply self by other in-place. """
 
-        if isintlike(other) and other == 1:
-            return self
-
-        return _perform_op(
-            other,
-            self._imul_fractional,
-            self._imul_integral,
-            opname="in-place multiplication",
-        )
-
-    def _idiv_fractional(self, f):
-        self.numerator = self.numerator * f.denominator
-        self.denominator = self.denominator * f.numerator
-
-        self.normalize()
-
-        return self
-
-    def _idiv_integral(self, x):
-        self.numerator = self.numerator
-        self.denominator = self.denominator * x
-
-        self.normalize()
-
+        self.data = self.data.__imul__(other)
         return self
 
     def __itruediv__(self, other):
@@ -669,12 +363,9 @@ class FractionArray:
         if isintlike(other) and other == 1:
             return self
 
-        return _perform_op(
-            other,
-            self._imul_fractional,
-            self._imul_integral,
-            opname="in-place division",
-        )
+        self.data /= other
+
+        return self
 
     def transpose(self):
         """
@@ -686,39 +377,38 @@ class FractionArray:
         """
 
         return FractionArray(
-            self.numerator.transpose(),
-            self.denominator.transpose(),
-            _normalize=False,
+            self.data.transpose(),
         )
 
     def __len__(self):
-        return len(self.numerator)
+        return len(self.data)
 
     def __getitem__(self, key):
-        numerator = self.numerator[key]
-        denominator = self.denominator[key]
+        ans = self.data[key]
+        if isinstance(ans, mpq):
+            return ans
 
-        if np.shape(numerator) == ():
-            return Fraction(numerator, denominator, _normalize=False)
-
-        return FractionArray(numerator, denominator, _normalize=False)
+        return FractionArray(ans)
 
     def __setitem__(self, key, value):
         if isinstance(value, tuple):
             numerator, denominator = value
-        elif isinstance(value, (Fraction, FractionArray)):
-            numerator = value.numerator
-            denominator = value.denominator
-        elif np.issubdtype(type(value), np.integer):
-            numerator = value
-            denominator = 1
-        else:
-            raise ValueError(
-                "Cannot assign value of type {}".format(type(value))
-            )
+            self.data[key] = mpq(numerator, denominator)
+            return
 
-        self.numerator[key] = numerator
-        self.denominator[key] = denominator
+        if isinstance(value, (Fraction, mpq)):
+            self.data[key] = mpq(int(value.numerator), int(value.denominator))
+            return
+
+        if np.issubdtype(type(value), np.integer):
+            self.data[key] = mpq(int(value))
+            return
+
+        if isinstance(value, FractionArray):
+            self.data[key] = value.data
+            return
+
+        raise ValueError("Cannot assign value of type {}".format(type(value)))
 
     def __getattr__(self, attribute):
         if attribute == "T":
@@ -735,8 +425,6 @@ class FractionArray:
                 yield self[r, :]
 
     def __repr__(self):
-        return "FractionArray(numerator={}, denominator={})".format(
-            self.numerator, self.denominator
-        )
+        return "FractionArray(data={})".format(self.data)
 
     __str__ = __repr__

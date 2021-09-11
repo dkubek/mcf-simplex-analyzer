@@ -5,15 +5,17 @@ description = "Analyzer of the simplex algorithm for the Multi-commodity flow pr
 authors = ["David Kubek <david.kubek@gmail.com>"]
 license = "MIT"
 
+include = ["src/**/*.so"]
+
 [tool.poetry.dependencies]
 python = ">=3.8,<3.10"
 numpy = "^1.20.2"
-numba = "^0.53.1"
 click = "^7.1.2"
 sympy = "^1.8"
 networkx = "^2.6.1"
 attrs = "^21.2.0"
 scipy = "^1.7.0"
+gmpy2 = {version = "2.1.0b5", allow-prereleases = true}
 
 [tool.poetry.dev-dependencies]
 jupyterlab = "^3.0.14"
@@ -26,6 +28,11 @@ scipy = "^1.7.0"
 pytest-cov = "^2.12.1"
 PuLP = "^2.5.0"
 jupyterlab-code-formatter = "^1.4.10"
+Cython = "^0.29.24"
+
+[tool.poetry.build]
+generate-setup-file = false
+script = "build.py"
 
 [tool.poetry.scripts]
 mcf-simplex = 'mcf_simplex_analyzer.cli:debug'

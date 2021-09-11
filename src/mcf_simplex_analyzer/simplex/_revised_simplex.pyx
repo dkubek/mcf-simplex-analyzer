@@ -1,3 +1,4 @@
+# cython: linetrace=True
 # -*- coding: utf-8 -*-
 """ The revised simplex method """
 
@@ -9,6 +10,9 @@ from typing import Union
 
 import attr
 import numpy as np
+import cython
+
+from gmpy2 import mpq
 
 from ._model import LPModel, InequalityType
 import mcf_simplex_analyzer.fractionarray as fa
@@ -49,46 +53,71 @@ def lu_factor(matrix: FractionArray, inplace=False):
         nonzero = np.where(out[i:, i] != 0)[0] + i
         for j in nonzero[1:]:
             factor = out[j, i] / out[i, i]
+            #print("factor", factor, type(factor))
+            #print("out", out, type(out))
             out[j, i:] -= factor * out[i, i:]
             out[j, i] = factor
 
     return perm, out
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef inline _mpq_dot(object[:] fa, object[:] fb):
+    """ Dot product of two arrays. """
 
-def _lu_solve(lu: FractionArray, x: FractionArray):
+    cdef:
+        size_t i, n
+
+    assert len(fa) == len(fb)
+
+    n = len(fa)
+
+    ans = mpq()
+    for i in range(n):
+        ans += fa[i] * fb[i]
+
+    return ans
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def _lu_solve(object[:, :] lu, object[:] x):
+    cdef:
+        size_t n, i
+
     n = lu.shape[0]
 
-    ans = fa.zeros_like(x)
+    ans = np.empty_like(x)
 
     # Ly = b
     for i in range(n):
-        nonzero = lu[i, :i] != 0
-        ans[i] = x[i] - fa.dot(lu[i, :i][nonzero], ans[:i][nonzero])
+        ans[i] = x[i] - _mpq_dot(lu[i, :i], ans[:i])
 
     # Ux = y
     for i in range(n - 1, -1, -1):
-        nonzero = lu[i, (i + 1) :] != 0
-        ans[i] -= fa.dot(lu[i, (i + 1) :][nonzero], ans[(i + 1) :][nonzero])
-        ans[i] /= lu[i, i]
+        ans[i] = ans[i] - _mpq_dot(lu[i, (i + 1) :], ans[(i + 1) :])
+        ans[i] = ans[i] / lu[i, i]
 
     return ans
 
 
-def _lu_solve_transposed(lu: FractionArray, x: FractionArray):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def _lu_solve_transposed(object[:, :] lu, object[:] x):
+    cdef:
+        size_t n, i
+
     n = lu.shape[0]
 
-    ans = fa.zeros_like(x)
+    ans = np.empty_like(x)
 
     # U^T y = b
     for i in range(n):
-        nonzero = lu[i, :i] != 0
-        ans[i] = x[i] - fa.dot(lu[i, :i][nonzero], ans[:i][nonzero])
-        ans[i] /= lu[i, i]
+        ans[i] = x[i] - _mpq_dot(lu[i, :i], ans[:i])
+        ans[i] = ans[i] / lu[i, i]
 
     # L^t x = y
     for i in range(n - 1, -1, -1):
-        nonzero = lu[i, (i + 1) :] != 0
-        ans[i] -= fa.dot(lu[i, (i + 1) :][nonzero], ans[(i + 1) :][nonzero])
+        ans[i] = ans[i] - _mpq_dot(lu[i, (i + 1) :], ans[(i + 1) :])
 
     return ans
 
@@ -128,13 +157,15 @@ class PLUSolver(Solver):
             raise ValueError("matrix must be square")
 
     def ftran(self, b: FractionArray):
-        return _lu_solve(self.lu, b[self.perm])
+        return FractionArray(_lu_solve(self.lu.data, b.data[self.perm]))
 
     def btran(self, b: FractionArray):
         if self._perm_trans is None:
             self._perm_trans = _inverse_permutation(self.perm)
 
-        return _lu_solve_transposed(self.lu.T, b)[self._perm_trans]
+        return FractionArray(
+            _lu_solve_transposed(self.lu.T.data, b.data)[self._perm_trans]
+        )
 
 
 @attr.s
@@ -174,7 +205,7 @@ class EtaFile:
 
         toc = time.perf_counter()
 
-        print("Ftran time", toc - tic)
+        #print("Ftran time", toc - tic)
 
         return tmp
 
@@ -186,7 +217,7 @@ class EtaFile:
             tmp = solver.btran(tmp)
 
         toc = time.perf_counter()
-        print("Btran time", toc - tic)
+        #print("Btran time", toc - tic)
 
         return tmp
 
@@ -203,14 +234,9 @@ def _is_unbounded(d):
 
 def _determine_leaving(p, d):
     positive = np.where(d > 0)[0]
-    print("positive", positive)
 
-    print("p[positive]", p[positive])
-    print("d[positive]", d[positive])
     bounds = p[positive] / d[positive]
-    print("bounds", bounds)
     valid = np.where(bounds >= 0)[0]
-    print("valid", valid)
     arg_min_bound = valid[bounds[valid].argmin()]
 
     min_bound = bounds[arg_min_bound]
@@ -230,6 +256,156 @@ def _determine_entering(obj):
     return entering_index
 
 
+
+def _construct_lp_formulation_data(model, need_artificial, base_indices):
+
+    right_hand_side, table_coo = _collect_sparse_table_from_constraints(
+        model, base_indices, need_artificial
+    )
+    table = fas.coo_to_csc(table_coo)
+
+    objective = fa.zeros(table.shape[1])
+    for fv in model.objective_function:
+        objective[fv.var.index] = fv.factor
+
+    return table, objective, right_hand_side
+
+
+def _collect_sparse_table_from_constraints(
+        model,
+        base_indices,
+        need_artificial_variables
+):
+
+    cols, rows, data = [], [], []
+    right_hand_side = fa.zeros(len(model.constraints))
+    for row, constraint in enumerate(model.constraints):
+        if constraint.type == InequalityType.GE:
+            constraint = -constraint
+
+        if constraint.type == InequalityType.LE:
+            slack = model.new_variable(name=f"slack_{row}")
+            constraint = (
+                    constraint.combination + slack
+                    == constraint.right_hand_side
+            )
+
+            if constraint.right_hand_side < 0:
+                need_artificial_variables.append(row)
+                constraint = -constraint
+            else:
+                base_indices[row] = slack.index
+
+        elif constraint.type == InequalityType.EQ:
+            if constraint.right_hand_side < 0:
+                constraint = -constraint
+
+            need_artificial_variables.append(row)
+
+        right_hand_side[row] = constraint.right_hand_side
+        for fv in constraint.combination:
+            cols.append(fv.var.index)
+            rows.append(row)
+            data.append(fv.factor)
+
+    shape = (
+        len(model.constraints),
+        model.variable_no,
+    )
+    table_coo = fas.FractionCOOMatrix(
+        shape=shape,
+        cols=np.array(cols, dtype=np.int64),
+        rows=np.array(rows, dtype=np.int64),
+        data=fa.FractionArray.from_array(data),
+    )
+
+    return right_hand_side, table_coo
+
+
+def _formulate_phase_one(
+        model,
+        table,
+        right_hand_side,
+        base_indices,
+        need_artificial_variables
+):
+
+    artificial_no = len(need_artificial_variables)
+
+    artificial_table = _construct_artificial_table(
+        model, table, need_artificial_variables
+    )
+
+    artificial_base = _construct_artificial_base(
+        model, base_indices, need_artificial_variables
+    )
+
+    artificial_objective = _construct_artificial_objective(model, artificial_no)
+
+    phase_one = RevisedSimplex(
+        table=artificial_table,
+        right_hand_side=right_hand_side,
+        objective_function=artificial_objective,
+        base=artificial_base,
+    )
+
+    return phase_one
+
+
+def _construct_artificial_objective(model, artificial_no):
+
+    artificial_objective = fa.zeros(model.variable_no + artificial_no)
+    artificial_objective[-artificial_no:] = -1
+
+    return artificial_objective
+
+
+def _construct_artificial_base(
+        model,
+        base_indices,
+        need_artificial_variables
+):
+    artificial_no = len(need_artificial_variables)
+
+    base_indices[need_artificial_variables] = np.arange(
+        model.variable_no,
+        model.variable_no + artificial_no,
+        dtype=np.int64,
+    )
+    artificial_base = np.zeros(
+        model.variable_no + artificial_no, dtype=bool
+    )
+    artificial_base[base_indices] = True
+    #print("abase", artificial_base, flush=True)
+
+    return artificial_base
+
+
+def _construct_artificial_table(
+        model,
+        table,
+        need_artificial_variables,
+):
+
+    artificial_no = len(need_artificial_variables)
+
+    artificial_table = fas.FractionCOOMatrix(
+        shape=(len(model.constraints), artificial_no),
+        rows=np.array(
+            need_artificial_variables, dtype=np.int64
+        ),
+        cols=np.arange(
+            artificial_no,
+            dtype=np.int64,
+        ),
+        data=fa.ones(artificial_no),
+    )
+    artificial_table = fas.coo_to_csc(artificial_table, sorted=True)
+    artificial_table = fas.csc_hstack((table, artificial_table))
+
+    return artificial_table
+
+
 @attr.s(kw_only=True)
 class RevisedSimplex:
     table: fas.FractionCSCMatrix = attr.ib()
@@ -246,94 +422,23 @@ class RevisedSimplex:
     def instantiate(cls, model: LPModel):
 
         base_indices = np.empty(len(model.constraints), dtype=np.int64)
-        constraints_need_artificial_variables = []
+        need_artificial_variables = []
 
-        cols, rows, data = [], [], []
-        right_hand_side = fa.zeros(len(model.constraints))
-        for row, constraint in enumerate(model.constraints):
-            if constraint.type == InequalityType.GE:
-                constraint = -constraint
-
-            if constraint.type == InequalityType.LE:
-                slack = model.new_variable(name=f"slack_{row}")
-                constraint = (
-                    constraint.combination + slack
-                ) == constraint.right_hand_side
-
-                if constraint.right_hand_side < 0:
-                    constraints_need_artificial_variables.append(row)
-                    constraint = -constraint
-                else:
-                    base_indices[row] = slack.index
-
-            elif constraint.type == InequalityType.EQ:
-                if constraint.right_hand_side < 0:
-                    constraint = -constraint
-
-                constraints_need_artificial_variables.append(row)
-
-            right_hand_side[row] = constraint.right_hand_side
-            for fv in constraint.combination:
-                cols.append(fv.var.index)
-                rows.append(row)
-                data.append(fv.factor)
-
-        shape = (
-            len(model.constraints),
-            model.variable_no,
+        table, objective, right_hand_side = _construct_lp_formulation_data(
+            model,
+            need_artificial_variables,
+            base_indices
         )
-        table_coo = fas.FractionCOOMatrix(
-            shape=shape,
-            cols=np.array(cols, dtype=np.int64),
-            rows=np.array(rows, dtype=np.int64),
-            data=fa.FractionArray.from_array(data),
-        )
-        table = fas.coo_to_csc(table_coo)
-
-        objective = fa.zeros(shape[1])
-        for fv in model.objective_function:
-            objective[fv.var.index] = fv.factor
-
         base = np.zeros(model.variable_no, dtype=bool)
 
-        artificial_no = len(constraints_need_artificial_variables)
+        artificial_no = len(need_artificial_variables)
         if artificial_no > 0:
-            artificial_table = fas.FractionCOOMatrix(
-                shape=(len(model.constraints), artificial_no),
-                rows=np.array(
-                    constraints_need_artificial_variables, dtype=np.int64
-                ),
-                cols=np.arange(
-                    artificial_no,
-                    dtype=np.int64,
-                ),
-                data=fa.ones(artificial_no),
-            )
-            artificial_table = fas.coo_to_csc(artificial_table, sorted=True)
-            artificial_table = fas.csc_hstack((table, artificial_table))
-
-            base_indices[constraints_need_artificial_variables] = np.arange(
-                model.variable_no,
-                model.variable_no + artificial_no,
-                dtype=np.int64,
-            )
-
-            artificial_base = np.zeros(
-                model.variable_no + artificial_no, dtype=bool
-            )
-            artificial_base[base_indices] = True
-            print("abase", artificial_base, flush=True)
-
-            artificial_objective = fa.zeros(model.variable_no + artificial_no)
-            artificial_objective[-artificial_no:] = -1
-            print("aobj", artificial_objective, flush=True)
-            print("arhs", right_hand_side)
-
-            phase_one = RevisedSimplex(
-                table=artificial_table,
-                right_hand_side=right_hand_side,
-                objective_function=artificial_objective,
-                base=artificial_base,
+            phase_one = _formulate_phase_one(
+                model,
+                table,
+                right_hand_side,
+                base_indices,
+                need_artificial_variables
             )
 
             #return phase_one
@@ -352,12 +457,14 @@ class RevisedSimplex:
         else:
             base[base_indices] = True
 
-        return RevisedSimplex(
+        second_phase = RevisedSimplex(
             table=table,
             right_hand_side=right_hand_side,
             objective_function=objective,
             base=base,
         )
+
+        return second_phase
 
     def solve(self, refactorization_period=25):
 
@@ -376,6 +483,7 @@ class RevisedSimplex:
 
         iteration_count = 0
         while True:
+            print(iteration_count)
             if iteration_count % 100 == 0:
                 logger.info("\nIteration: %d", iteration_count)
             else:
@@ -385,7 +493,7 @@ class RevisedSimplex:
                 eta_file = self._refactorize_base(base_table)
 
             if np.any(self._base_values < 0):
-                print("base values", self._base_values)
+                #print("base values", self._base_values)
                 raise ValueError("Variable negative")
 
             # Compute objective function
@@ -478,31 +586,32 @@ class RevisedSimplex:
 
         logger = logging.getLogger(__name__)
         logger.info("Refactorizing base...")
-        print("*" * 80, flush=True)
+        #print("*" * 80, flush=True)
         tic = time.perf_counter()
 
         self._base_indices = np.where(self.base)[0]
+        print("self.base ", self.base)
         self._nonbase_indices = np.where(~self.base)[0]
-        print("base ind", self._base_indices)
+        #print("base ind", self._base_indices)
 
         fas.csc_to_dense(
             fas.csc_select_columns(self.table, self._base_indices),
             out=base_table,
         )
 
-        print(self.table)
-        print(
-            "real",
-            fas.csc_to_dense(
-                fas.csc_select_columns(self.table, self._base_indices),
-            ),
-        )
+        #print(self.table)
+        #print(
+        #    "real",
+        #    fas.csc_to_dense(
+        #        fas.csc_select_columns(self.table, self._base_indices),
+        #    ),
+        #)
 
-        print(base_table)
+        #print(base_table)
 
         # Factorize the basis
         perm, lu = lu_factor(base_table, inplace=True)
-        print(lu)
+        #print(lu)
 
         # Initialize the eta file
         eta_file = EtaFile()
@@ -517,15 +626,20 @@ class RevisedSimplex:
         return eta_file
 
     def _compute_objective(self, y):
+        cdef:
+            size_t i, j, n, start, end
 
-        tmp = fa.empty(len(self._nonbase_indices))
-        for i, col in enumerate(self._nonbase_indices):
+        n = len(self._nonbase_indices)
+        tmp = fa.empty(n)
+
+        for i in range(n):
+            col = self._nonbase_indices[i]
             start, end = self.table.indptr[col], self.table.indptr[col + 1]
-            tmp[i] = sum(
-                factor * y[row]
-                for row, factor in zip(
-                    self.table.indices[start:end], self.table.data[start:end]
-                )
-            )
+
+            ans = mpq()
+            for j in range(start, end):
+                row = self.table.indices[j]
+                ans += y[row] * self.table.data[j]
+            tmp[i] = ans
 
         return self.objective_function[self._nonbase_indices] - tmp

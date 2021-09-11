@@ -4,6 +4,8 @@
 import attr
 import numpy as np
 
+from gmpy2 import mpq
+
 import mcf_simplex_analyzer.fractionarray as fa
 from mcf_simplex_analyzer.fractionarray import FractionArray
 
@@ -26,7 +28,7 @@ class FractionCOOMatrix:
     rows = attr.ib()
     cols = attr.ib()
 
-    data: FractionArray = attr.ib()
+    data = attr.ib()
 
     def nnz(self):
         return len(self.data)
@@ -93,8 +95,7 @@ def csc_to_dense(csc: FractionCSCMatrix, out: FractionArray = None):
                 "fit the output shape {}".format(out.shape)
             )
 
-        out.numerator.fill(0)
-        out.denominator.fill(1)
+        out.data.fill(mpq())
 
     if out is None:
         out = fa.zeros(csc.shape)
@@ -173,6 +174,9 @@ def csc_select_columns(csc: FractionCSCMatrix, columns):
     m, _ = csc.shape
     n = len(columns)
 
+    #print(csc)
+    #print(csc.data, type(csc.data), csc.data.dtype)
+
     indptr = np.empty(n + 1, dtype=np.int64)
     index = 0
     for i, col in enumerate(columns):
@@ -182,6 +186,7 @@ def csc_select_columns(csc: FractionCSCMatrix, columns):
 
     indices = np.empty(index, dtype=np.int64)
     data = fa.empty(index)
+    #print("data", data)
 
     index = 0
     for i, col in enumerate(columns):

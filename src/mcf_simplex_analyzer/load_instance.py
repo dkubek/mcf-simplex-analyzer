@@ -185,16 +185,7 @@ def _to_array_types(
 
         arr = None
         if dtype is Fraction:
-            numerators = np.fromiter(
-                map(lambda frac: frac.numerator, data[field]), dtype=np.int64
-            )
-            denominators = np.fromiter(
-                map(lambda frac: frac.denominator, data[field]), dtype=np.int64
-            )
-
-            arr = FractionArray(
-                numerator=numerators, denominator=denominators
-            )
+            arr = FractionArray.from_array(data[field])
         else:
             arr = np.array(data[field], dtype=dtype)
 
@@ -280,21 +271,18 @@ def read_sup(sup_file: Path, instance_format: str):
 
     # Split the node field into origin/destination by inspecting the flow
     if instance_format in ["mnetgen", "pds", "planar", "grid"]:
-        nums = data["flow"].numerator
-        sign = np.sign(nums)
+        positive = data["flow"] > 0
         origin = -np.ones_like(data["node"])
         destination = -np.ones_like(data["node"])
 
-        mask = sign < 0
-        destination[mask] = data["node"][mask]
+        destination[~positive] = data["node"][~positive]
 
-        mask = sign > 0
-        origin[mask] = data["node"][mask]
+        origin[positive] = data["node"][positive]
 
         data["origin"] = origin
         data["destination"] = destination
 
-        nums *= sign
+        data["flow"] = abs(data["flow"])
 
         del data["node"]
 

@@ -1,10 +1,9 @@
-import fractions
-
+from gmpy2 import mpq
 import numpy as np
 from mcf_simplex_analyzer.fractionarray._fractionarray import FractionArray
 
 
-def empty(shape, dtype=np.int64):
+def empty(shape, dtype=mpq):
     """
     Return a new FractionArray of given shape and type, without initializing
     entries.
@@ -19,11 +18,7 @@ def empty(shape, dtype=np.int64):
 
     """
 
-    return FractionArray(
-        numerator=np.empty(shape, dtype=dtype),
-        denominator=np.empty(shape, dtype=dtype),
-        _normalize=False,
-    )
+    return FractionArray(np.empty(shape, dtype=dtype))
 
 
 def empty_like(fa, shape=None):
@@ -42,14 +37,10 @@ def empty_like(fa, shape=None):
 
     """
 
-    return FractionArray(
-        numerator=np.empty_like(fa.numerator, shape=shape),
-        denominator=np.empty_like(fa.denominator, shape=shape),
-        _normalize=False,
-    )
+    return FractionArray(data=np.empty_like(fa.data, shape=shape))
 
 
-def zeros(shape, dtype=np.int64):
+def zeros(shape, dtype=mpq):
     """
     Return a new FractionArray of given shape and type, filled with zeros.
 
@@ -63,10 +54,10 @@ def zeros(shape, dtype=np.int64):
 
     """
 
-    return FractionArray(
-        numerator=np.zeros(shape, dtype=dtype),
-        denominator=np.ones(shape, dtype=dtype),
-    )
+    ans = empty(shape, dtype=dtype)
+    ans.data.fill(mpq())
+
+    return ans
 
 
 def zeros_like(fa, shape=None):
@@ -86,13 +77,13 @@ def zeros_like(fa, shape=None):
 
     """
 
-    return FractionArray(
-        numerator=np.zeros_like(fa.numerator, shape=shape),
-        denominator=np.ones_like(fa.denominator, shape=shape),
-    )
+    ans = empty_like(fa, shape=shape)
+    ans.data.fill(mpq())
+
+    return ans
 
 
-def ones(shape, dtype=np.int64):
+def ones(shape, dtype=mpq):
     """
     Return a new FractionArray of given shape and type, filled with ones.
 
@@ -106,10 +97,10 @@ def ones(shape, dtype=np.int64):
 
     """
 
-    return FractionArray(
-        numerator=np.ones(shape, dtype=dtype),
-        denominator=np.ones(shape, dtype=dtype),
-    )
+    ans = empty(shape, dtype=dtype)
+    ans.data.fill(mpq(1))
+
+    return ans
 
 
 def ones_like(fa, shape=None):
@@ -129,10 +120,10 @@ def ones_like(fa, shape=None):
 
     """
 
-    return FractionArray(
-        numerator=np.ones_like(fa.numerator, shape=shape),
-        denominator=np.ones_like(fa.denominator, shape=shape),
-    )
+    ans = empty_like(fa, shape=shape)
+    ans.data.fill(mpq(1))
+
+    return ans
 
 
 def concatenate(farrays, axis=0, dtype=None):
@@ -153,12 +144,7 @@ def concatenate(farrays, axis=0, dtype=None):
     """
 
     return FractionArray(
-        np.concatenate(
-            [farr.numerator for farr in farrays], axis=axis, dtype=dtype
-        ),
-        np.concatenate(
-            [farr.denominator for farr in farrays], axis=axis, dtype=dtype
-        ),
+        np.concatenate([farr.data for farr in farrays], axis=axis, dtype=dtype)
     )
 
 
@@ -174,10 +160,7 @@ def hstack(farrays):
 
     """
 
-    return FractionArray(
-        np.hstack([farr.numerator for farr in farrays]),
-        np.hstack([farr.denominator for farr in farrays]),
-    )
+    return FractionArray(np.hstack([farr.data for farr in farrays]))
 
 
 def vstack(farrays):
@@ -192,10 +175,7 @@ def vstack(farrays):
 
     """
 
-    return FractionArray(
-        np.vstack([farr.numerator for farr in farrays]),
-        np.vstack([farr.denominator for farr in farrays]),
-    )
+    return FractionArray(np.vstack([farr.data for farr in farrays]))
 
 
 def dot(fa: FractionArray, fb: FractionArray):
@@ -224,9 +204,4 @@ def dot(fa: FractionArray, fb: FractionArray):
     if len(fa.shape) != 1:
         raise NotImplementedError("Only 1D array dot product is supported.")
 
-    ans = fractions.Fraction(0)
-    mul = fa * fb
-    for i in range(fa.shape[0]):
-        ans += mul[i]
-
-    return ans
+    return np.sum(fa.data * fb.data, initial=mpq())
