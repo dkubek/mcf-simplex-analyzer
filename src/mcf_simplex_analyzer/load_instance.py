@@ -20,24 +20,24 @@ SUPPORTED_INSTANCES = ("mnetgen", "pds", "planar", "grid", "jlf")
 """ Supported instance formats """
 
 MUT_FIELD_TYPES = {
-    "mutual_ptr": np.int32,
+    "mutual_ptr": np.int64,
     "capacity": Fraction,
 }
 
 ARC_FIELD_TYPES = {
-    "fromnode": np.int32,
-    "tonode": np.int32,
-    "commodity": np.int32,
+    "fromnode": np.int64,
+    "tonode": np.int64,
+    "commodity": np.int64,
     "cost": Fraction,
     "individual_capacity": Fraction,
     "mutual_ptr": np.uint32,
 }
 
 SUP_FIELD_TYPES = {
-    "node": np.int32,
-    "commodity": np.int32,
-    "origin": np.int32,
-    "destination": np.int32,
+    "node": np.int64,
+    "commodity": np.int64,
+    "origin": np.int64,
+    "destination": np.int64,
     "flow": Fraction,
 }
 
@@ -201,7 +201,13 @@ def _read_file(
 ) -> MutableMapping[str, Any]:
     """ Read a file with a template. '_' means ignore """
 
-    data = defaultdict(list)
+    data = {}
+    for field in fields:
+        if field == "_":
+            continue
+
+        data[field] = list()
+
     with open(file, "r") as fin:
         for line in fin:
             for field, value in zip(fields, line.split()):

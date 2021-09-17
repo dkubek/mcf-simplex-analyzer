@@ -53,8 +53,6 @@ def lu_factor(matrix: FractionArray, inplace=False):
         nonzero = np.where(out[i:, i] != 0)[0] + i
         for j in nonzero[1:]:
             factor = out[j, i] / out[i, i]
-            #print("factor", factor, type(factor))
-            #print("out", out, type(out))
             out[j, i:] -= factor * out[i, i:]
             out[j, i] = factor
 
@@ -164,7 +162,7 @@ class PLUSolver(Solver):
             self._perm_trans = _inverse_permutation(self.perm)
 
         return FractionArray(
-            _lu_solve_transposed(self.lu.T.data, b.data)[self._perm_trans]
+            _lu_solve_transposed(self.lu.T.data, b.data[self._perm_trans])
         )
 
 
@@ -205,8 +203,6 @@ class EtaFile:
 
         toc = time.perf_counter()
 
-        #print("Ftran time", toc - tic)
-
         return tmp
 
     def btran(self, b: FractionArray):
@@ -217,7 +213,6 @@ class EtaFile:
             tmp = solver.btran(tmp)
 
         toc = time.perf_counter()
-        #print("Btran time", toc - tic)
 
         return tmp
 
@@ -232,17 +227,19 @@ def _is_unbounded(d):
     return np.all(d <= 0)
 
 
-def _determine_leaving(p, d):
+def _determine_leaving(p, d, all_possible=False):
     positive = np.where(d > 0)[0]
 
     bounds = p[positive] / d[positive]
     valid = np.where(bounds >= 0)[0]
-    arg_min_bound = valid[bounds[valid].argmin()]
+    min_bound = bounds[valid].min()
 
-    min_bound = bounds[arg_min_bound]
+    arg_min_bound = valid[np.where(bounds == min_bound)[0]]
     leaving_index = positive[arg_min_bound]
+    if all_possible:
+        return leaving_index, min_bound
 
-    return leaving_index, min_bound
+    return leaving_index[0], min_bound
 
 
 def _determine_entering(obj):
@@ -254,7 +251,6 @@ def _determine_entering(obj):
     entering_index = valid_entering[obj[valid_entering].argmax()]
 
     return entering_index
-
 
 
 def _construct_lp_formulation_data(model, need_artificial, base_indices):
@@ -295,7 +291,6 @@ def _collect_sparse_table_from_constraints(
                 constraint = -constraint
             else:
                 base_indices[row] = slack.index
-
         elif constraint.type == InequalityType.EQ:
             if constraint.right_hand_side < 0:
                 constraint = -constraint
@@ -376,7 +371,6 @@ def _construct_artificial_base(
         model.variable_no + artificial_no, dtype=bool
     )
     artificial_base[base_indices] = True
-    #print("abase", artificial_base, flush=True)
 
     return artificial_base
 
@@ -412,7 +406,9 @@ class RevisedSimplex:
     objective_function: fa.FractionArray = attr.ib()
     right_hand_side: fa.FractionArray = attr.ib()
     base: np.ndarray = attr.ib()
+
     is_feasible = attr.ib(default=True)
+    eta_file : EtaFile = attr.ib(default=None)
 
     _base_indices: np.ndarray = attr.ib(default=None)
     _nonbase_indices: np.ndarray = attr.ib(default=None)
@@ -441,17 +437,82 @@ class RevisedSimplex:
                 need_artificial_variables
             )
 
-            #return phase_one
             ans = phase_one.solve()
 
             if ans.status != "success" or ans.value < 0:
                 phase_one.is_feasible = False
                 return phase_one
 
+            real_variable_no = phase_one.table.shape[1] - artificial_no
             if np.any(phase_one.base[-artificial_no:]):
-                raise NotImplementedError(
-                    "Driving out of the base in two step not implemented"
-                )
+                print("DRIVING OUT OF THE BASIS")
+
+                # Initialize base table
+                m = phase_one.table.shape[0]
+                base_table = fa.empty((m, m))
+                eta_file = phase_one._refactorize_base(base_table)
+
+                S = np.where(phase_one._base_indices >= real_variable_no)[0]
+                print(S)
+
+                rows_to_remove = []
+                for leaving_index in S:
+                    leaving = phase_one._base_indices[leaving_index]
+                    print("leaving_index", leaving_index, "leaving", leaving)
+
+                    e = fa.zeros(m)
+                    e[leaving_index] = 1
+                    print(e)
+
+                    r = eta_file.btran(e)
+                    print(r)
+
+                    n = len(phase_one._nonbase_indices)
+                    entering_index, entering = None, None
+                    for i in range(n):
+                        col = phase_one._nonbase_indices[i]
+
+                        start = phase_one.table.indptr[col]
+                        end = phase_one.table.indptr[col + 1]
+
+                        ans = mpq()
+                        for j in range(start, end):
+                            row = phase_one.table.indices[j]
+                            ans += r[row] * phase_one.table.data[j]
+
+                        if ans != 0:
+                            entering_index = i
+                            entering = col
+                            break
+
+                    if entering_index is None:
+                        rows_to_remove.append(leaving_index)
+                        continue
+
+                    phase_one._update_basis(
+                        entering, entering_index, leaving, leaving_index
+                    )
+
+                    # Update eta file
+                    fas.csc_to_dense(
+                        fas.csc_select_columns(
+                            phase_one.table, phase_one._base_indices
+                        ),
+                        out=base_table,
+                    )
+                    # Factorize the basis
+                    perm, lu = lu_factor(base_table, inplace=True)
+                    #print(lu)
+
+                    # Initialize the eta file
+                    eta_file = EtaFile()
+                    eta_file.extend(PLUSolver(lu=lu, perm=perm))
+
+                print(rows_to_remove)
+
+                # Remove rows
+                table = fas.csc_remove_rows(table, rows_to_remove)
+                right_hand_side = np.delete(right_hand_side, rows_to_remove)
 
             base = phase_one.base[:-artificial_no]
         else:
@@ -479,7 +540,7 @@ class RevisedSimplex:
         m = self.table.shape[0]
         base_table = fa.empty((m, m))
 
-        eta_file = self._refactorize_base(base_table)
+        self.eta_file = self._refactorize_base(base_table)
 
         iteration_count = 0
         while True:
@@ -489,22 +550,22 @@ class RevisedSimplex:
             else:
                 logger.debug("\nIteration: %d", iteration_count)
 
-            if len(eta_file.file) > refactorization_period:
-                eta_file = self._refactorize_base(base_table)
+            if len(self.eta_file.file) > refactorization_period:
+                self.eta_file = self._refactorize_base(base_table)
 
             if np.any(self._base_values < 0):
-                #print("base values", self._base_values)
                 raise ValueError("Variable negative")
 
             # Compute objective function
-            y = eta_file.btran(self.objective_function[self._base_indices])
+            y = self.eta_file.btran(self.objective_function[self._base_indices])
             logger.debug("y= %s", y)
 
             nonbasic_objective = self._compute_objective(y)
             logger.debug("nonbasic_objective= %s", nonbasic_objective)
 
-            # Determine entering
-            entering_index = _determine_entering(nonbasic_objective)
+            entering_index, leaving_index, min_bound = self._greatest_increase(
+                nonbasic_objective
+            )
             logger.debug("entering_index= %s", entering_index)
 
             if entering_index is None:
@@ -529,7 +590,7 @@ class RevisedSimplex:
             )[:, 0]
             logger.debug("Entering column= %s", entering_column)
 
-            d = eta_file.ftran(entering_column)
+            d = self.eta_file.ftran(entering_column)
             logger.debug("d= %s", d)
 
             if _is_unbounded(d):
@@ -537,7 +598,6 @@ class RevisedSimplex:
                 return LPResult(status="unbounded")
 
             # Determine leaving
-            leaving_index, min_bound = _determine_leaving(self._base_values, d)
             leaving = self._base_indices[leaving_index]
             logger.debug("leaving_index= %d", leaving_index)
             logger.debug("leaving= %d", leaving)
@@ -549,16 +609,18 @@ class RevisedSimplex:
 
             # Update the eta file
             eta = EtaSolver(index=leaving_index, column=d)
-            eta_file.extend(eta)
+            self.eta_file.extend(eta)
 
             # Update optimal solution
-            # self._base_values -= min_bound * d
-            # self._base_values[leaving_index] = min_bound
-            self._base_values = eta_file.ftran(self.right_hand_side)
+            self._base_values -= min_bound * d
+            self._base_values[leaving_index] = min_bound
+            #self._base_values = self.eta_file.ftran(self.right_hand_side)
             optimum = fa.dot(
                 self._base_values,
                 self.objective_function[self._base_indices],
             )
+            print(optimum)
+            print(leaving, entering)
 
             logger.info("base values: %s", self._base_values)
             logger.info("optimum: %s", optimum)
@@ -586,32 +648,18 @@ class RevisedSimplex:
 
         logger = logging.getLogger(__name__)
         logger.info("Refactorizing base...")
-        #print("*" * 80, flush=True)
         tic = time.perf_counter()
 
         self._base_indices = np.where(self.base)[0]
-        print("self.base ", self.base)
         self._nonbase_indices = np.where(~self.base)[0]
-        #print("base ind", self._base_indices)
 
         fas.csc_to_dense(
             fas.csc_select_columns(self.table, self._base_indices),
             out=base_table,
         )
 
-        #print(self.table)
-        #print(
-        #    "real",
-        #    fas.csc_to_dense(
-        #        fas.csc_select_columns(self.table, self._base_indices),
-        #    ),
-        #)
-
-        #print(base_table)
-
         # Factorize the basis
         perm, lu = lu_factor(base_table, inplace=True)
-        #print(lu)
 
         # Initialize the eta file
         eta_file = EtaFile()
@@ -643,3 +691,48 @@ class RevisedSimplex:
             tmp[i] = ans
 
         return self.objective_function[self._nonbase_indices] - tmp
+
+    def _greatest_increase(self, obj):
+        entering_index, leaving_index, min_bound = None, None, None
+        for i, value in enumerate(obj.data):
+            if value <= 0:
+                continue
+
+            entering = self._nonbase_indices[i]
+
+            # Determine entering column
+            entering_column = fas.csc_to_dense(
+                fas.csc_select_columns(self.table, [entering])
+            )[:, 0]
+
+            d = self.eta_file.ftran(entering_column)
+
+            if _is_unbounded(d):
+                print(entering_column)
+                print(entering, value, d)
+                return i, leaving_index, min_bound
+
+            leaving_indices, min_bound = _determine_leaving(
+                self._base_values, d, all_possible=True
+            )
+
+            best = None
+            new_base_values = self._base_values - min_bound * d
+            for j in leaving_indices:
+                tmp = new_base_values.copy()
+                tmp[j] = min_bound
+
+                new_base_indices = self._base_indices.copy()
+                new_base_indices[j] = entering
+
+                optimum = fa.dot(
+                    tmp,
+                    self.objective_function[new_base_indices],
+                )
+
+                if best is None or optimum > best:
+                    best = optimum
+                    leaving_index = j
+                    entering_index = i
+
+        return entering_index, leaving_index, min_bound

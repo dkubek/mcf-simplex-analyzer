@@ -170,12 +170,50 @@ def csc_hstack(seq):
     )
 
 
+def csc_remove_rows(csc: FractionCSCMatrix, rows):
+    m, n = csc.shape
+
+    rows = set(row for row in rows if row < m)
+    if len(rows) == 0:
+        return FractionCSCMatrix(
+            shape=csc.shape,
+            indptr=csc.indptr.copy(),
+            indices=csc.indices.copy(),
+            data=csc.data.copy(),
+        )
+
+    to_remove_count = 0
+    for row in rows:
+        to_remove_count += np.count_nonzero(csc.indices == row)
+
+    new_size = len(csc.data) - to_remove_count
+    indptr = np.empty_like(csc.indptr)
+    indices = np.empty(new_size, dtype=np.int64)
+    data = fa.empty(new_size)
+
+    index = 0
+    for col in range(n):
+        indptr[col] = index
+        start, end = csc.indptr[col], csc.indptr[col + 1]
+        for i in range(start, end):
+            row = csc.indices[i]
+
+            if row in rows:
+                continue
+
+            indices[index] = row
+            data[index] = csc.data[i]
+            index += 1
+    indptr[n] = index
+
+    return FractionCSCMatrix(
+        shape=(m - len(rows), n), indptr=indptr, indices=indices, data=data
+    )
+
+
 def csc_select_columns(csc: FractionCSCMatrix, columns):
     m, _ = csc.shape
     n = len(columns)
-
-    #print(csc)
-    #print(csc.data, type(csc.data), csc.data.dtype)
 
     indptr = np.empty(n + 1, dtype=np.int64)
     index = 0
@@ -186,7 +224,6 @@ def csc_select_columns(csc: FractionCSCMatrix, columns):
 
     indices = np.empty(index, dtype=np.int64)
     data = fa.empty(index)
-    #print("data", data)
 
     index = 0
     for i, col in enumerate(columns):
