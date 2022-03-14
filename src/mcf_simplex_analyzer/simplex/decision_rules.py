@@ -1,21 +1,35 @@
 import numpy as np
-from mcf_simplex_analyzer.simplex.simplex import Simplex
+from mcf_simplex_analyzer.simplex._standard_simplex import StandardSimplex
 
 
 class SimplexDecisionRule:
     @classmethod
-    def entering(cls, simplex: Simplex):
+    def entering(cls, simplex: StandardSimplex):
         raise NotImplementedError(
             "SimplexDecision entering needs to be "
             "implemented in a subclass."
         )
 
     @classmethod
-    def leaving_row(cls, entering, simplex: Simplex):
+    def leaving_row(cls, entering, simplex: StandardSimplex):
         raise NotImplementedError(
             "SimplexDecision leaving_row needs to be "
             "implemented in a subclass."
         )
+
+
+def dantzig(simplex: StandardSimplex):
+    nonbasic = np.where(~simplex.base)[0]
+    positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
+
+    if positive.size == 0:
+        return None
+
+    entering = nonbasic[
+        positive[simplex.objective_fun[nonbasic][positive].argmax()]
+    ]
+
+    return entering
 
 
 class Dantzig(SimplexDecisionRule):
@@ -42,7 +56,7 @@ class DantzigAux(SimplexDecisionRule):
         return dantzig(simplex)
 
     @classmethod
-    def leaving_row(cls, entering, simplex: Simplex):
+    def leaving_row(cls, entering, simplex: StandardSimplex):
         positive = np.where(simplex.table[..., entering] > 0)[0]
 
         bounds = (
@@ -64,20 +78,6 @@ class DantzigAux(SimplexDecisionRule):
                         leaving_row = simplex._var_index_to_row[0]
 
         return leaving_row
-
-
-def dantzig(simplex: Simplex):
-    nonbasic = np.where(~simplex.base)[0]
-    positive = np.where(simplex.objective_fun[nonbasic] > 0)[0]
-
-    if positive.size == 0:
-        return None
-
-    entering = nonbasic[
-        positive[simplex.objective_fun[nonbasic][positive].argmax()]
-    ]
-
-    return entering
 
 
 class Bland(SimplexDecisionRule):

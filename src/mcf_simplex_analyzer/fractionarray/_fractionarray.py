@@ -8,73 +8,8 @@ from fractions import Fraction
 
 import operator
 import numpy as np
-from scipy.sparse.sputils import isintlike
 
-
-newaxis = None
-
-
-def concatenate(farrays, axis=0, dtype=None):
-    """
-    Join a sequence of arrays along an existing axis.
-
-    Args:
-        farrays (sequence of FractionArrays): A sequence of FractionArrays
-        axis (int, optional):
-            The axis along which the arrays will be joined. If axis is None,
-            arrays are flattened before use. (default 0)
-        dtype (dtype_like):
-            If provided, the destination array will have this dtype.
-
-    Returns:
-        FractionArray: The concatenated array.
-
-    """
-
-    return FractionArray(
-        np.concatenate(
-            [farr.numerator for farr in farrays], axis=axis, dtype=dtype
-        ),
-        np.concatenate(
-            [farr.denominator for farr in farrays], axis=axis, dtype=dtype
-        ),
-    )
-
-
-def hstack(farrays):
-    """
-    Stack arrays in sequence horizontally (column wise).
-
-    Args:
-        farrays (sequence of FractionArrays): A sequence of FractionArrays
-
-    Returns:
-        FractionArray: The stacked array.
-
-    """
-
-    return FractionArray(
-        np.hstack([farr.numerator for farr in farrays]),
-        np.hstack([farr.denominator for farr in farrays]),
-    )
-
-
-def vstack(farrays):
-    """
-    Stack arrays in sequence vertically (row wise).
-
-    Args:
-        farrays (sequence of FractionArrays): A sequence of FractionArrays
-
-    Returns:
-        FractionArray: The stacked array.
-
-    """
-
-    return FractionArray(
-        np.vstack([farr.numerator for farr in farrays]),
-        np.vstack([farr.denominator for farr in farrays]),
-    )
+# from scipy.sparse.sputils import isintlike
 
 
 def is_integral_array(x):
@@ -90,6 +25,10 @@ def is_integral_array(x):
     """
 
     return isinstance(x, np.ndarray) and np.issubdtype(x.dtype, np.integer)
+
+
+def isintlike(x):
+    return is_integral_array(x) or np.issubdtype(type(x), np.integer)
 
 
 def to_array(input_iter, dtype=int):
@@ -217,7 +156,14 @@ class FractionArray:
             denominator.reshape(original_shape),
         )
 
-    def __init__(self, numerator, denominator, dtype=int, _normalize=True):
+    def __init__(
+        self,
+        numerator,
+        denominator,
+        dtype=np.int64,
+        _normalize=True,
+        _check_type=True,
+    ):
         """
         Create a new FractionArray.
 
@@ -242,10 +188,11 @@ class FractionArray:
         """
 
         if dtype is None:
-            dtype = int
+            dtype = np.int64
 
-        numerator = to_array(numerator, dtype=dtype)
-        denominator = to_array(denominator, dtype=dtype)
+        if _check_type:
+            numerator = to_array(numerator, dtype=dtype)
+            denominator = to_array(denominator, dtype=dtype)
 
         if numerator.shape != denominator.shape:
             raise ValueError(
@@ -729,6 +676,21 @@ class FractionArray:
             opname="in-place division",
         )
 
+    def transpose(self):
+        """
+        Reverses the dimensions of the sparse matrix.
+
+        Returns:
+            FractionArray: The transposed FractionArray.
+
+        """
+
+        return FractionArray(
+            self.numerator.transpose(),
+            self.denominator.transpose(),
+            _normalize=False,
+        )
+
     def __len__(self):
         return len(self.numerator)
 
@@ -744,12 +706,25 @@ class FractionArray:
     def __setitem__(self, key, value):
         if isinstance(value, tuple):
             numerator, denominator = value
-        else:
+        elif isinstance(value, (Fraction, FractionArray)):
             numerator = value.numerator
             denominator = value.denominator
+        elif np.issubdtype(type(value), np.integer):
+            numerator = value
+            denominator = 1
+        else:
+            raise ValueError(
+                "Cannot assign value of type {}".format(type(value))
+            )
 
         self.numerator[key] = numerator
         self.denominator[key] = denominator
+
+    def __getattr__(self, attribute):
+        if attribute == "T":
+            return self.transpose()
+        else:
+            raise AttributeError(attribute + " not found")
 
     def __iter__(self):
         if len(self.shape) == 1:

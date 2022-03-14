@@ -4,11 +4,16 @@ from mcf_simplex_analyzer.simplex.decision_rules import (
     Bland,
     Lexicographic,
 )
-from mcf_simplex_analyzer.simplex.simplex import (
+from mcf_simplex_analyzer.simplex._standard_simplex import (
     LPFormulation,
     LPFormType,
-    Simplex,
+    StandardSimplex,
 )
+
+from mcf_simplex_analyzer.simplex._model import LPModel, InequalityType, lp_sum
+
+from mcf_simplex_analyzer.simplex._revised_simplex import RevisedSimplex
+
 
 DECISION_RULES = {
     "lex": Lexicographic,
@@ -24,5 +29,9 @@ __all__ = [
     "DantzigAux",
     "LPFormulation",
     "LPFormType",
-    "Simplex",
+    "StandardSimplex",
+    "RevisedSimplex",
+    "LPModel",
+    "InequalityType",
+    "lp_sum",
 ]

@@ -6,7 +6,7 @@ from fractions import Fraction
 import numpy as np
 
 from mcf_simplex_analyzer.simplex import (
-    Simplex,
+    StandardSimplex,
     LPFormulation,
     LPFormType,
 )
@@ -24,7 +24,7 @@ def test_instantiate_canonical():
         objective=FractionArray.from_array([]),
     )
 
-    result = Simplex.instantiate(problem)
+    result = StandardSimplex.instantiate(problem)
 
     assert result is not None
 
@@ -40,7 +40,7 @@ def test_instantiate_standard():
         objective=FractionArray.from_array([]),
     )
 
-    result = Simplex.instantiate(problem)
+    result = StandardSimplex.instantiate(problem)
 
     assert result is not None
 
@@ -117,13 +117,11 @@ PROBLEMS_SUCCESS = [
 
 @pytest.mark.simplex
 @pytest.mark.parametrize("problem,expected_value", PROBLEMS_SUCCESS)
-@pytest.mark.parametrize(
-    "decision_rule", ["dantzig", "bland", "lex"]
-)
+@pytest.mark.parametrize("decision_rule", ["dantzig", "bland", "lex"])
 def test_problems(problem, expected_value, decision_rule):
     """ Test problem from canonical formulation. """
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve(decision_rule=decision_rule)
 
     assert result["result"] == "success"
@@ -142,7 +140,7 @@ def test_problem_degeneracy_canonical():
         objective=FractionArray.from_array([2, -1, 8]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve()
 
     expected_value = Fraction(27, 2)
@@ -173,7 +171,7 @@ def test_problem_degeneracy_standard():
         objective=FractionArray.from_array([2, -1, 8, 0, 0, 0]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve()
 
     expected_value = Fraction(27, 2)
@@ -204,7 +202,7 @@ def test_problem_cycling_canonical():
         objective=FractionArray.from_array([10, -57, -9, -24]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve()
 
     assert result["result"] == "cycle"
@@ -235,7 +233,7 @@ def test_problem_cycling_standard():
         objective=FractionArray.from_array([10, -57, -9, -24, 0, 0, 0]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve()
 
     assert result["result"] == "cycle"
@@ -252,7 +250,7 @@ def test_problem_two_phase():
         objective=FractionArray.from_array([1, -1, 1]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve(decision_rule="dantzig")
 
     expected_value = Fraction(3, 5)
@@ -281,7 +279,9 @@ def test_problem_infeasible_canonical():
         objective=FractionArray.from_array([1]),
     )
 
-    result = Simplex.instantiate(problem).solve(decision_rule="dantzig")
+    result = StandardSimplex.instantiate(problem).solve(
+        decision_rule="dantzig"
+    )
 
     assert result["result"] == "infeasible"
 
@@ -297,7 +297,7 @@ def test_problem_unbounded_canonical():
         objective=FractionArray.from_array([1, 3, -1]),
     )
 
-    result = Simplex.instantiate(problem).solve()
+    result = StandardSimplex.instantiate(problem).solve()
 
     assert result["result"] == "unbounded"
 
@@ -319,12 +319,13 @@ def test_problem_cycling_bland():
         objective=FractionArray.from_array([10, -57, -9, -24]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve(decision_rule="bland")
 
     assert result["result"] == "success"
     assert result["value"] == Fraction(1)
     assert np.all(result["variables"] >= 0)
+
 
 @pytest.mark.simplex
 def test_problem_cycling_lex():
@@ -343,7 +344,7 @@ def test_problem_cycling_lex():
         objective=FractionArray.from_array([10, -57, -9, -24]),
     )
 
-    simplex = Simplex.instantiate(problem)
+    simplex = StandardSimplex.instantiate(problem)
     result = simplex.solve(decision_rule="lex")
 
     assert result["result"] == "success"
