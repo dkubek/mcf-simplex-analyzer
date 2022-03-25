@@ -1,7 +1,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -10,6 +9,7 @@
 #include <vector>
 
 #include <Graph.h>
+#define HAVE_GMP
 #include <glpk.h>
 
 constexpr char USAGE[] = "Usage: mcfglpk mpsfile";
@@ -31,9 +31,54 @@ constexpr glp_smcp DEFAULT_GLP_SMCP = {
 };
 
 std::ostream&
+get_basis_value(std::ostream& os, const std::string& filename)
+{
+    glp_prob* P;
+    P = glp_create_prob();
+
+    glp_smcp params = DEFAULT_GLP_SMCP;
+    params.it_lim = 1;
+    params.msg_lev = GLP_MSG_ERR;
+
+    // Read the problem from a file
+    glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
+
+    // Construct initial basis
+    glp_adv_basis(P, 0);
+    // glp_std_basis(P);
+
+    auto ncols = glp_get_num_cols(P);
+    auto nrows = glp_get_num_rows(P);
+
+    auto info = glp_create_dbginfo();
+
+    int count = 0;
+
+    while (glp_get_status(P) != GLP_OPT) {
+        // Solve the problem step by step, day by day
+        glp_exact_debug(P, &params, info);
+
+        std::cerr << count++ << ":\t";
+        if (!info->updated)
+            std::cerr << "NOT UPDATED" << '\n';
+        else {
+            std::cerr << "UPDATED" << '\n';
+            for (int i = 0; i <= info->m; ++i) {
+                os << info->partial_basis[i] << ' ';
+            }
+            os << '\n';
+        }
+    }
+
+    glp_dbginfo_free(info);
+    glp_delete_prob(P);
+
+    return os;
+}
+
+std::ostream&
 get_basis_factorizations(std::ostream& os, const std::string& filename)
 {
-
     glp_prob* P;
     P = glp_create_prob();
 
@@ -64,6 +109,7 @@ get_basis_factorizations(std::ostream& os, const std::string& filename)
         os << '\n';
     }
 
+    glp_delete_prob(P);
     return os;
 }
 
@@ -146,9 +192,14 @@ main(int argc, char* argv[])
     }
 
     // compare_execution_time(args[1]);
-    std::ofstream fout{"basis_factorizations.txt"};
-    get_basis_factorizations(fout, args[1]);
-    fout.close();
+    //{
+    //    std::ofstream fout{"basis_factorizations.txt"};
+    //    get_basis_factorizations(fout, args[1]);
+    //}
+    {
+        std::ofstream fout{"basis_values.txt"};
+        get_basis_value(fout, args[1]);
+    }
 
     return EXIT_SUCCESS;
 }
