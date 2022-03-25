@@ -15,13 +15,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add external libraries
 add_subdirectory(libs/Graph)
+add_subdirectory(libs/glpk)
 
 # $source_files is a space-delimited list of filenames.
 add_executable(convert src/convert.cpp)
 add_executable(mcfglpk src/main.cpp)
 
+target_compile_features(mcfglpk PUBLIC cxx_std_17)
+
 # IMPORTANT: Make sure to link library to executable *after* it has been added
 target_link_libraries(mcfglpk PRIVATE Graph)
-target_link_libraries(mcfglpk PRIVATE glpk)
+target_link_libraries(mcfglpk PRIVATE glpk-debug)
 
 target_link_libraries(convert PRIVATE Graph)
