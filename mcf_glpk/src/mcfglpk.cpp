@@ -14,30 +14,28 @@
 
 constexpr char USAGE[] = "Usage: mcfglpk mpsfile";
 constexpr glp_smcp DEFAULT_GLP_SMCP = {
-    .msg_lev = GLP_MSG_ALL,
-    .meth = GLP_PRIMAL,
-    .pricing = GLP_PT_PSE,
-    .r_test = GLP_RT_STD,
-    .tol_bnd = 1e-7,
-    .tol_dj = 1e-7,
-    .tol_piv = 1e-9,
-    .obj_ll = -std::numeric_limits<double>::max(),
-    .obj_ul = std::numeric_limits<double>::max(),
-    .it_lim = std::numeric_limits<int>::max(),
-    .tm_lim = std::numeric_limits<int>::max(),
-    .out_frq = 500,
-    .out_dly = 0,
-    .presolve = GLP_OFF
-};
+        .msg_lev = GLP_MSG_ALL,
+        .meth = GLP_PRIMAL,
+        .pricing = GLP_PT_PSE,
+        .r_test = GLP_RT_STD,
+        .tol_bnd = 1e-7,
+        .tol_dj = 1e-7,
+        .tol_piv = 1e-9,
+        .obj_ll = -std::numeric_limits<double>::max(),
+        .obj_ul = std::numeric_limits<double>::max(),
+        .it_lim = std::numeric_limits<int>::max(),
+        .tm_lim = std::numeric_limits<int>::max(),
+        .out_frq = 500,
+        .out_dly = 0,
+        .presolve = GLP_OFF};
 
-std::ostream&
-get_basis_value(std::ostream& os, const std::string& filename)
-{
-    glp_prob* P;
+std::ostream &
+get_basis_value(std::ostream &os, const std::string &filename) {
+    glp_prob *P;
     P = glp_create_prob();
 
     glp_smcp params = DEFAULT_GLP_SMCP;
-    params.it_lim = 1;
+    //params.it_lim = 1;
     params.msg_lev = GLP_MSG_ERR;
 
     // Read the problem from a file
@@ -52,23 +50,34 @@ get_basis_value(std::ostream& os, const std::string& filename)
 
     auto info = glp_create_dbginfo();
 
-    int count = 0;
+    //int count = 0;
+    //size_t it = 0;
+    //while (glp_get_status(P) != GLP_OPT) {
+    //    // Solve the problem step by step, day by day
+    //    glp_exact_debug(P, &params, info);
 
-    while (glp_get_status(P) != GLP_OPT) {
-        // Solve the problem step by step, day by day
-        glp_exact_debug(P, &params, info);
+    //    std::cerr << count++ << ":\t";
+    //    if (!info->updated)
+    //        std::cerr << "NOT UPDATED" << '\n';
+    //    else {
+    //        std::cerr << "UPDATED" << '\n';
+    //        os << "Objective val: " << info->objective_values[it] << '\n';
+    //        for (int i = 0; i < info->no_basic; ++i) {
+    //            size_t offset = it * info->no_basic;
+    //            os << info->basic_values[offset + i] << ' ';
+    //        }
+    //        os << '\n';
+    //        it++;
+    //        if (it > 10)
+    //            break;
 
-        std::cerr << count++ << ":\t";
-        if (!info->updated)
-            std::cerr << "NOT UPDATED" << '\n';
-        else {
-            std::cerr << "UPDATED" << '\n';
-            for (int i = 0; i <= info->m; ++i) {
-                os << info->partial_basis[i] << ' ';
-            }
-            os << '\n';
-        }
-    }
+    //    }
+    //}
+
+    glp_exact_debug(P, &params, info);
+
+    for (size_t i = 0; i < info->no_iterations; ++i)
+        os << info->objective_values[i] << '\n';
 
     glp_dbginfo_free(info);
     glp_delete_prob(P);
@@ -76,10 +85,9 @@ get_basis_value(std::ostream& os, const std::string& filename)
     return os;
 }
 
-std::ostream&
-get_basis_factorizations(std::ostream& os, const std::string& filename)
-{
-    glp_prob* P;
+std::ostream &
+get_basis_factorizations(std::ostream &os, const std::string &filename) {
+    glp_prob *P;
     P = glp_create_prob();
 
     glp_smcp params = DEFAULT_GLP_SMCP;
@@ -113,15 +121,13 @@ get_basis_factorizations(std::ostream& os, const std::string& filename)
     return os;
 }
 
-void
-compare_execution_time(const std::string& filename)
-{
-    glp_prob* P;
+void compare_execution_time(const std::string &filename) {
+    glp_prob *P;
     P = glp_create_prob();
 
     glp_smcp params = DEFAULT_GLP_SMCP;
     params.it_lim = 1;
-    params.msg_lev = GLP_MSG_ERR;
+    params.msg_lev = GLP_MSG_ON;
 
     // Read the problem from a file
     glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
@@ -173,32 +179,30 @@ compare_execution_time(const std::string& filename)
               << std::chrono::duration<double, std::milli>(diff_partial).count()
               << " ms" << std::endl;
     std::cout
-      << "COMPLETE:\t"
-      << std::chrono::duration<double, std::milli>(diff_complete).count()
-      << " ms" << std::endl;
+            << "COMPLETE:\t"
+            << std::chrono::duration<double, std::milli>(diff_complete).count()
+            << " ms" << std::endl;
 
     // Cleanup
     glp_delete_prob(P);
 }
 
-int
-main(int argc, char* argv[])
-{
-    std::vector<std::string> args{ argv, argv + argc };
+int main(int argc, char *argv[]) {
+    std::vector<std::string> args{argv, argv + argc};
 
     if (args.size() != 2) {
         std::cerr << USAGE << '\n';
         return EXIT_FAILURE;
     }
 
-    // compare_execution_time(args[1]);
+    //compare_execution_time(args[1]);
     //{
     //    std::ofstream fout{"basis_factorizations.txt"};
     //    get_basis_factorizations(fout, args[1]);
     //}
     {
         std::ofstream fout{"basis_values.txt"};
-        get_basis_value(fout, args[1]);
+        get_basis_value(std::cout, args[1]);
     }
 
     return EXIT_SUCCESS;
