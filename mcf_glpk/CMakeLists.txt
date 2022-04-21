@@ -16,6 +16,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Add external libraries
 add_subdirectory(libs/Graph)
 
+# Add custom GLPK library
 set(GLPK_WITH_GMP ON)
 add_subdirectory(libs/glpk)
 

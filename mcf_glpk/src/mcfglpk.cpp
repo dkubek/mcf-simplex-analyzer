@@ -29,17 +29,25 @@ constexpr glp_smcp DEFAULT_GLP_SMCP = {
         .out_dly = 0,
         .presolve = GLP_OFF};
 
-std::ostream &
-get_basis_value(std::ostream &os, const std::string &filename) {
+
+constexpr glp_stmcp GLP_DEFAULT_STMCP = {
+        .objective_trace = GLP_OBJECTIVE_TRACE_ON,
+        .basis_trace = GLP_BASIS_TRACE_ON,
+        .nonbasis_trace = GLP_NONBASIS_TRACE_ON,
+        .complexity_trace = GLP_COMPLEXITY_TRACE_ON,
+        .pivot_rule = GLP_TRACE_PIVOT_DANTZIG,
+};
+
+std::ostream &get_trace(std::ostream &os, const std::string &filename) {
     glp_prob *P;
     P = glp_create_prob();
 
     glp_smcp params = DEFAULT_GLP_SMCP;
-    //params.it_lim = 1;
+    // params.it_lim = 1;
     params.msg_lev = GLP_MSG_ERR;
 
     // Read the problem from a file
-    glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
+    glp_read_lp(P, NULL, filename.c_str());
 
     // Construct initial basis
     glp_adv_basis(P, 0);
@@ -48,45 +56,94 @@ get_basis_value(std::ostream &os, const std::string &filename) {
     auto ncols = glp_get_num_cols(P);
     auto nrows = glp_get_num_rows(P);
 
-    auto info = glp_create_dbginfo();
+    std::vector<std::string> names;
+    names.push_back("");
+    for (size_t i = 1; i <= nrows; i++) {
+        std::string name(glp_get_row_name(P, i));
+        names.push_back(name);
+    }
 
-    //int count = 0;
-    //size_t it = 0;
-    //while (glp_get_status(P) != GLP_OPT) {
-    //    // Solve the problem step by step, day by day
-    //    glp_exact_debug(P, &params, info);
+    for (size_t j = 1; j <= ncols; j++) {
+        std::string name(glp_get_col_name(P, j));
+        names.push_back(name);
+    }
 
-    //    std::cerr << count++ << ":\t";
-    //    if (!info->updated)
-    //        std::cerr << "NOT UPDATED" << '\n';
-    //    else {
-    //        std::cerr << "UPDATED" << '\n';
-    //        os << "Objective val: " << info->objective_values[it] << '\n';
-    //        for (int i = 0; i < info->no_basic; ++i) {
-    //            size_t offset = it * info->no_basic;
-    //            os << info->basic_values[offset + i] << ' ';
-    //        }
-    //        os << '\n';
-    //        it++;
-    //        if (it > 10)
-    //            break;
+    auto trace = glp_create_ssxtrace(&GLP_DEFAULT_STMCP);
 
-    //    }
-    //}
+    glp_exact_trace(P, &params, trace);
+    // glp_exact(P, &params);
 
-    glp_exact_debug(P, &params, info);
+    // Print solution
+    mpz_t num, den;
+    mpq_t value;
+    mpq_init(value);
+    mpz_init(num);
+    mpz_init(den);
 
-    for (size_t i = 0; i < info->no_iterations; ++i)
-        os << info->objective_values[i] << '\n';
+    for (size_t i = 0; i < trace->no_iterations; ++i) {
+        mpq_set(value, trace->objective_values[i]);
+        mpq_get_den(den, value);
+        mpq_get_num(num, value);
+        auto bits = mpz_sizeinbase(den, 2) + mpz_sizeinbase(num, 2);
 
-    glp_dbginfo_free(info);
+        os << value << '\t' << bits << '\n';
+    }
+
+    size_t start = (trace->no_iterations - 1) * trace->no_basic;
+    size_t k = trace->no_basic + trace->no_nonbasic;
+    os << "Number of names: " << names.size() - 1 << '\n';
+    for (size_t i = 0; i < trace->no_basic; ++i) {
+        auto variable = trace->bases[start + i];
+        auto s = trace->status[(trace->no_iterations - 1) * (k + 1) + variable];
+
+        mpq_set(value, trace->basic_values[start + i]);
+        mpq_get_den(den, value);
+        mpq_get_num(num, value);
+        auto bits = mpz_sizeinbase(den, 2) + mpz_sizeinbase(num, 2);
+
+        os << variable << '\t' << s << '\t' << names[variable] << '\t' << value
+           << '\t' << bits << '\n';
+    }
+
+    for (size_t i = 1; i <= k; i++) {
+        auto s = trace->status[(trace->no_iterations - 1) * (k + 1) + i];
+        if (s == GLP_BS) continue;
+
+        os << i << '\t' << s << '\t' << names[i] << '\t';
+
+        switch (s) {
+            case GLP_NL:
+                mpq_set(value, trace->lb[i]);
+                break;
+            case GLP_NU:
+                mpq_set(value, trace->ub[i]);
+                break;
+            case GLP_NS:
+                mpq_set(value, trace->lb[i]);
+                break;
+            default:
+                throw std::invalid_argument("UNKNOWN STATUS");
+        }
+
+        mpq_get_den(den, value);
+        mpq_get_num(num, value);
+        auto bits = mpz_sizeinbase(den, 2) + mpz_sizeinbase(num, 2);
+        os << value << '\t' << bits << '\n';
+    }
+
+    glp_print_sol(P, "out.txt");
+
+    mpq_clear(value);
+    mpz_clear(den);
+    mpz_clear(num);
+    glp_ssxtrace_free(trace);
     glp_delete_prob(P);
 
     return os;
 }
 
-std::ostream &
-get_basis_factorizations(std::ostream &os, const std::string &filename) {
+std::ostream &get_basis_factorizations(std::ostream &os,
+                                       const std::string &filename) {
     glp_prob *P;
     P = glp_create_prob();
 
@@ -108,12 +165,9 @@ get_basis_factorizations(std::ostream &os, const std::string &filename) {
     while (glp_get_status(P) != GLP_OPT) {
         glp_exact(P, &params);
 
-        if (!glp_bf_exists(P))
-            glp_factorize(P);
+        if (!glp_bf_exists(P)) glp_factorize(P);
 
-        for (int i = 1; i <= nrows; i++) {
-            os << glp_get_bhead(P, i) << ' ';
-        }
+        for (int i = 1; i <= nrows; i++) { os << glp_get_bhead(P, i) << ' '; }
         os << '\n';
     }
 
@@ -153,9 +207,7 @@ void compare_execution_time(const std::string &filename) {
     // Solve the problem step by step, day by day
     std::cout << "Computing solution iteration by iteration ...\n";
     auto start = std::chrono::steady_clock::now();
-    while (glp_get_status(P) != GLP_OPT) {
-        glp_exact(P, &params);
-    }
+    while (glp_get_status(P) != GLP_OPT) { glp_exact(P, &params); }
     auto end = std::chrono::steady_clock::now();
     auto diff_partial = end - start;
     std::cout << "Finished.\n";
@@ -195,14 +247,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    //compare_execution_time(args[1]);
+    // compare_execution_time(args[1]);
     //{
-    //    std::ofstream fout{"basis_factorizations.txt"};
-    //    get_basis_factorizations(fout, args[1]);
-    //}
+    //     std::ofstream fout{"basis_factorizations.txt"};
+    //     get_basis_factorizations(fout, args[1]);
+    // }
     {
         std::ofstream fout{"basis_values.txt"};
-        get_basis_value(std::cout, args[1]);
+        get_trace(std::cout, args[1]);
     }
 
     return EXIT_SUCCESS;
