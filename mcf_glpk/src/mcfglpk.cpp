@@ -35,7 +35,7 @@ constexpr glp_stmcp GLP_DEFAULT_STMCP = {
         .basis_trace = GLP_BASIS_TRACE_ON,
         .nonbasis_trace = GLP_NONBASIS_TRACE_ON,
         .complexity_trace = GLP_COMPLEXITY_TRACE_ON,
-        .pivot_rule = GLP_TRACE_PIVOT_DANTZIG,
+        .pivot_rule = GLP_TRACE_PIVOT_BEST,
 };
 
 std::ostream &get_trace(std::ostream &os, const std::string &filename) {
@@ -57,7 +57,7 @@ std::ostream &get_trace(std::ostream &os, const std::string &filename) {
     auto nrows = glp_get_num_rows(P);
 
     std::vector<std::string> names;
-    names.push_back("");
+    names.resize(1);
     for (size_t i = 1; i <= nrows; i++) {
         std::string name(glp_get_row_name(P, i));
         names.push_back(name);
