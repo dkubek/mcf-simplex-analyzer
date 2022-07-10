@@ -60,6 +60,9 @@ $b = (b_1, \ldots, b_m) \in \mathbb{R}^m$.
 [TODO] Standard and Canonical form
 [TODO] Variable bounds form
 
+[TODO] Geometric interpretation
+[FIGURE: Geometric interpretation]
+
 *[ When was the concept of LP conceived and by whom? ]*
 
 [TODO] Unimportant?
@@ -67,8 +70,8 @@ $b = (b_1, \ldots, b_m) \in \mathbb{R}^m$.
 *[ Why is LP interesting/usefull/important? ]*
 
 Linear programming is one of the most studied classes of optimization problems.
-The reason is that a great number of real world problems can be formulated
-as a linear programming problem. Linear programming has been heavily used in in
+The reason being that a great number of real world problems can be formulated as
+a linear programming problem. Linear programming has been heavily used in in
 microeconomics and company management, such as planning, production,
 transportation, decision making and other issues, either to maximize the income
 or minimize the costs of a production scheme.
@@ -98,57 +101,20 @@ For a more detailed discussion of LP see:
 
 [./simplex_algorithm_overview]
 
+[TODO][Computational form of LP problem]
 
 ### Standard Simplex Algorithm
 
-[TODO] Computational form
-
-Review dictionary "student" algorithm
-
-- How does Standard Simplex work?
+[./standard_simplex]
 
 ### Revised Simplex Algorithm
 
-*[How does Revised Simplex work?]*
-
-**Step 0** (Initialization).
-
-Presolve the LP problem.
-Scale the LP problem.
-Select an initial basic solution (B, N).
-if the initial basic solution is feasible then proceed to step 2.
-
-**Step 1** (Phase I).
-
-Construct an auxiliary problem 
-
-Apply the revised simplex algorithm. If the final basic solution (B, N) is feasible, then proceed to step 2 in order to solve the initial problem. The LP problem can be either optimal or infeasible.
-
-**Step 2** (Phase II).
-
-**Step 2.1** (Test of Optimality).
-
-Choose the index l of the entering variable using a pivoting rule. Variable x_l enters the basis.
-
-**Step 2.2**(Pivoting).
-
-Compute the pivot column $h_l$
-
-Choose the leaving variable
-
-**Step 2.3** (Update).
-
-Swap indices k and l. Update the new basis inverse AB , using a basis update
-scheme. Update vectors $xB$ , $w$, and $s_N$ .
-
-
-*[TODO: Revised simplex vs standard simplex]*
+[./revised_simplex]
 
 ### Effective Implementation of Revised Simplex
 
 - There exist effective implementations of Simplex (however mostly floating point)
 - exact LP solutions
-
 
 #### Sparse Matrices
 
@@ -177,11 +143,19 @@ TODO
 
 # Implementation
 
+### Why exact solutions
+
+[On_linear_programming]
+
 ### Tentative solution in Python
 
 - current options for exact LP solvers
 - python, numpy, sympy, sage, GLPK, Gurobi, Floating point exact
 
+
+### glpk_exact internals
+
+[FIGURE: glpk_exact internals]
 
 ### GLPK exact trace API
 
