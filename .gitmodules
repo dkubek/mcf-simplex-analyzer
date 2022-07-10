@@ -1,0 +1,3 @@
+[submodule "mcf_glpk/libs/glpk"]
+	path = mcf_glpk/libs/glpk
+	url = https://github.com/dkubek/glpk
