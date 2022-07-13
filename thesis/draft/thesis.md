@@ -8,6 +8,11 @@ TODO
 
 ## Linear Programming
 
+*[ Where to find detailed descriptions of linear programming ]*
+
+For a more detailed discussion of LP see:
+[ Matousek, Chvatal ]
+
 *[What is optimization and optimization problem?]*
 
 **Definition** (Optimization problem) A (mathematical) optimization problem is
@@ -46,28 +51,92 @@ $$
 
 Function application with linear functions can be generally represented as a matrix vector multiplication. Therefore, we get that LP problems can be expressed in the following way:
 
-[TODO] Integer Linear Programming
-
 $$
 \begin{align*}
-    \text{minimize}\;&  c^T x \\
+    \text{minimize}\;&  c^T x \;\left[+\, c_0\right]\\
     \text{subject to}\;&    A x \le b
 \end{align*}
 $$
-where $c \in \mathbb{R}^n$ is (TODO ???), $A \in \mathbb{R}^{m \times n}$ and
-$b = (b_1, \ldots, b_m) \in \mathbb{R}^m$.
+where $c \in \mathbb{R}^n$ is called the *cost vector*, $A \in \mathbb{R}^{m \times n}$ is the *constraint matrix* and
+$b = (b_1, \ldots, b_m) \in \mathbb{R}^m$ is called the *right hand side*, $x \in \mathbb{R}^n$ is the vector of *decision variables*.
 
-[TODO] Standard and Canonical form
-[TODO] Variable bounds form
 
-[TODO] Geometric interpretation
-[FIGURE: Geometric interpretation]
+[TODO][Integer Linear Programming (ILP)]
+
+In LP problems from both real life and theory we often encounter quantities for
+which it only makes sense to attain integral values. The extension of LP to
+account for integral variables is called integral linear programming (ILP)
+
+$$
+\begin{align*}
+    \text{minimize}\;&  c^T x \;\left[+\, c_0\right]\\
+    \text{subject to}\;&    A x \le b \\
+    & x \in \mathbb{Z}^n
+\end{align*}
+$$
+
+Note that it is not always possible to just solve a version of the ILP problem
+within real numbers (this is called LP relaxation) and then round the variables
+in the optimal solution to the nearest integer.
+
+Solving a general integer program is computationally difficult (more exactly, it
+is an NP-hard problem), in contrast to solving a linear program. 
+
+[TODO][Mixed Integer Linear Programming (MIP)]
+
+In practice one often has to often work with both real valued and integral
+variables within the same problem. This leads to *mixed integer programming* and
+it is in all likelihood the most common type of optimization problem [Matousek].
+
+[TODO][Standard and Canonical form]
+
+One usually works with LP described in a standardized form [TODO: Why?].
+
+**Definition (standard form)**
+$$
+\begin{align*}
+    \text{minimize}\;&  c^T x\\
+    \text{subject to}\;&    A x \ge b \\
+    & x \ge 0
+\end{align*}
+$$
+
+**Definition (feasible region)**
+For a LP problem in standard form we define the feasible region of the problem as
+$$
+M = \{ x \in \mathbb{R}^n \mid A x \ge b \wedge x \ge 0 \}
+$$
+
+**Definition (hyperspace, half-space)** 
+Hyperspace
+$$
+h = \{ x \in \mathbb{R}^n \mid a^T x = b \}
+$$
+Half-space
+$$
+h^- = \{ x \in \mathbb{R}^n \mid a^T x \le b \} \\
+h^+ = \{ x \in \mathbb{R}^n \mid a^T x \ge b \} \\
+$$
+for $a,x \in \mathbb{R}^n$ and $b \in \mathbb{R}$.
+
+[Geometric interpretation]
+
+The feasible region can be also understood geometrically as
+a intersection of half-spaces defined by the problem constraints. The intersection of a finite number of half spaces is called a polyhedron.
+
+**Definition (vertex)**
+The extreme points that cannot be written as a nontrivial linear combination of other points are called *vertices*.
+
+![Feasible region of a LP problem](img/feasible_region.png)
+
+[TODO][Infeasibility]
+[TODO][Unboundedness]
 
 *[ When was the concept of LP conceived and by whom? ]*
 
 [TODO] Unimportant?
 
-*[ Why is LP interesting/usefull/important? ]*
+*[ Why is LP interesting/useful/important? ]*
 
 Linear programming is one of the most studied classes of optimization problems.
 The reason being that a great number of real world problems can be formulated as
@@ -79,7 +148,7 @@ or minimize the costs of a production scheme.
 Moreover, many real world problems if not necessarily linear in nature, can be
 approximated by linear models.
 
-Many combinatorial problems can be expressed as linear programs, for examaple
+Many combinatorial problems can be expressed as linear programs, for example
 shortest paths, maximum flow, maximum matching, TSP (integer LP) and many others.
 
 Linear programming is also used as a subroutine in more complex algorithms.
@@ -89,13 +158,8 @@ algorithms (Frank-Wolfe)
 [TODO] Theoretical results (duality)
 
 However, as LP is a generic tool, there often exist specialized algorithms for a
-given problem offering better performance. It is then usefull to use LP if such
+given problem offering better performance. It is then useful to use LP if such
 algorithm is not known or devising such algorithm is too costly.
-
-*[ Where to find detailed descriptions of linear programming ]*
-
-For a more detailed discussion of LP see:
-[ Matousek, Chvatal ]
 
 ## LP algorithms
 
