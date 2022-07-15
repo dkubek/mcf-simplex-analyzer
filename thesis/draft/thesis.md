@@ -95,7 +95,7 @@ One usually works with LP described in a standardized form [TODO: Why?].
 **Definition (standard form)**
 $$
 \begin{align*}
-    \text{minimize}\;&  c^T x\\
+    \text{maximize}\;&  c^T x\\
     \text{subject to}\;&    A x \ge b \\
     & x \ge 0
 \end{align*}
@@ -167,6 +167,9 @@ algorithm is not known or devising such algorithm is too costly.
 
 [TODO][Computational form of LP problem]
 
+[FIGURE][Simplex flowchart]
+![Placeholder](img/simplex_flowchart.png)
+
 ### Standard Simplex Algorithm
 
 [./standard_simplex]
@@ -180,15 +183,18 @@ algorithm is not known or devising such algorithm is too costly.
 - There exist effective implementations of Simplex (however mostly floating point)
 - exact LP solutions
 
-#### Sparse Matrices
-
-- solving sparse system of linear equations
-- FTRAN, BTRAN
+#### Product Form of Inverse
 
 #### LU decomposition
 
 - Markowitz rule
 - fill-in
+
+#### Sparse Matrices
+
+- solving sparse system of linear equations
+- FTRAN, BTRAN
+
 
 #### Matrix decompositions
 

@@ -7,7 +7,7 @@ The simplex algorithm works with a formulation in yet another special form. Addi
 **Definition (Computational form)**
 $$
 \begin{align*}
-    \text{minimize}\;&  c^T x\\
+    \text{maximize}\;&  c^T x\\
     \text{subject to}\;&    A x = b \\
     & l \le x \le u
 \end{align*}
@@ -16,15 +16,18 @@ A full row rank, b RHS
 
 ### General form to computational form
 
-* Introduce slack variables
-* set correct bounds
-* NOTE: RHS disappears
+[Introduce slack variables]
+
+To
+
+* Set correct bounds
+* NOTE: RHS disappears (needs not be considered in implementation)
 
 
 **Definition (Computational Standard Form)**
 $$
 \begin{align*}
-    \text{minimize}\;&  c^T x\\
+    \text{maximize}\;&  c^T x\\
     \text{subject to}\;&    A x = b \\
     & x \ge 0
 \end{align*}
