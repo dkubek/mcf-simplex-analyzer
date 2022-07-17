@@ -12,6 +12,7 @@ Suppose we are given problem in standard form.
 
 [TODO][Definition (dictionary)]
 
+
 [TODO][Definition (basis)]
 
 We construct a dictionary as follows (adding auxiliary or slack variables)
