@@ -217,13 +217,25 @@ TODO
 
 [On_linear_programming]
 
+We want
+   - rational arithmetic
+   - 2 phase revised simplex
+   - sparse matrix manipulation
+   - ETA Update
+
 ### Tentative solution in Python
 
-- current options for exact LP solvers
-    * http://github.com/mateu/Algorithm-Simplex
-    * 
 
-- python, numpy, sympy, sage, GLPK, Gurobi, Floating point exact
+- current options for exact LP solvers
+    * Algorithm::Simplex http://github.com/mateu/Algorithm-Simplex ,https://metacpan.org/pod/Algorithm::Simplex (The implementation is currently limited to phase II, i.e. one must start with a feasible solution.)
+    * ``qsopt_ex`` : https://github.com/jonls/qsopt-ex (continually imporoving floating point solution)
+    * ``glpk_exact`` : https://www.gnu.org/software/glpk/
+    * ``interactive_simplex_method`` :https://doc.sagemath.org/html/en/reference/numerical/sage/numerical/interactive_simplex_method.html
+    * ``cl-rational_simplex`` : https://github.com/postamar/cl-rational-simplex (lisp)
+
+
+Relevant software:
+- python (Fraction), numpy, sympy, sage, GLPK, GMP, Floating point exact
 
 
 ### glpk_exact internals
@@ -237,11 +249,15 @@ TODO
 ## MCF
 
 **Definition (Network)**
+Network is the 5-tuple $(V, E, s, t, c)$ where
+
+
 [Mares, Hladik]
 
 
-- Total unimodularity
-- Effective combinatorial algorithms
+- Total unimodularity (network problems have the property that it is possible to find a integral solution in polynomial time)
+
+- Effective combinatorial algorithms (FF (with shortest path), Dinic, Preflow Push)
 
 ## MMCF
 
