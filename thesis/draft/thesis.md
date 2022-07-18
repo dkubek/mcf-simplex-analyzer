@@ -220,6 +220,9 @@ TODO
 ### Tentative solution in Python
 
 - current options for exact LP solvers
+    * http://github.com/mateu/Algorithm-Simplex
+    * 
+
 - python, numpy, sympy, sage, GLPK, Gurobi, Floating point exact
 
 
@@ -233,7 +236,10 @@ TODO
 
 ## MCF
 
-- Mares, Hladik
+**Definition (Network)**
+[Mares, Hladik]
+
+
 - Total unimodularity
 - Effective combinatorial algorithms
 

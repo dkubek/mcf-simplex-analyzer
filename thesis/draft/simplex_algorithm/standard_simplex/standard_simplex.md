@@ -6,14 +6,17 @@ problems and where it falls short.
 
 Suppose we are given problem in standard form.
 
-## Initialization
+[TODO][Definition (basis)]
 
-[TODO][Initialization]
+[TODO][Definition (basic solution)]
+
+[TODO][Definition (basic feasible solution)]
 
 [TODO][Definition (dictionary)]
 
+## Initialization
 
-[TODO][Definition (basis)]
+[TODO][Initialization]
 
 We construct a dictionary as follows (adding auxiliary or slack variables)
 

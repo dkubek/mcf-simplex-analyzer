@@ -72,10 +72,19 @@ To obtain $d$ we have to solve $Bd = a$.
 So far it was required of us to do computations not required in the standard simplex
 method. We might ask whether this was worth it or not. The main speedup comes from the end of the iteration. Where standard simplex has to do a laborious update of the whole dictionary, no such computation is needed in the revised simplex method.J
 
+[TODO][Add asymptotic comparison based on the size of the problem]
+
 ## Update the basis
 
 $B := B \ \{leaving\} \cup \{entering\}$
 
+## Summary of an iteration step
+
+![](../../img/revised_iteration.png)
+
+## Revised simplex with bounded variables
+
+So far we have worked in a problem in standard form. To reduce the size of the constraint matrix and therefore improve performance we can work with a problem in computational form and handle the bounds on decision variables explicitly. This introduces new steps in choosing the entering and leaving variables and detailed description can be found in [Chvatal]
 
 *[TODO: Revised simplex vs standard simplex]*
 
