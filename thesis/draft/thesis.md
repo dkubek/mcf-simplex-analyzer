@@ -238,6 +238,8 @@ Relevant software:
 - python (Fraction), numpy, sympy, sage, GLPK, GMP, Floating point exact
 
 
+[TODO][Why have we chosen GLPK?]
+
 ### glpk_exact internals
 
 [FIGURE: glpk_exact internals]
@@ -246,38 +248,17 @@ Relevant software:
 
 - my work 
 
+## Max Flow
+
+[./network_flows/max_flow.md]
+
 ## MCF
 
-**Definition (Network)**
-Network is the 5-tuple $(V, E, s, t, c)$ where
-
-
-[Mares, Hladik]
-
-
-- Total unimodularity (network problems have the property that it is possible to find a integral solution in polynomial time)
-
-- Effective combinatorial algorithms (FF (with shortest path), Dinic, Preflow Push)
+[./network_flows/mcf.md]
 
 ## MMCF
 
-The multicommodity min-cost flow (MMCF) problem is a generalization of the
-ordinary single-commodity min-cost flow (MCF) problem, in which flows of a
-different nature (commodities) must be routed at min- imal cost on a network,
-competing for the resources represented by the arc capacities.
-
-Although MMCF is a structured linear program (LP), standard LP techniques often
-fail to be efficient enough in practice, and several specialized algorithmshave
-been proposed for its solution during the last four decades.
-
-Let us remark that the number of commodities in real-life MMCFs ranges from
-just a few, as in most dis- tribution problems, to very many, such as the
-number of all the possible O/D pairs in some telecommunica- tion models. This
-is of course crucial in the choice of the most suitable solution algorithm
-(Frangioni and Gallo 1999)
-
-- MCF vs MMCF
-    * No known combinatorial algorithm for MMCF
+[./network_flows/mmcf.md]
 
 # Results
 
