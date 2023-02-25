@@ -1,3 +1,9 @@
 [submodule "mcf_glpk/libs/glpk"]
 	path = mcf_glpk/libs/glpk
 	url = https://github.com/dkubek/glpk
+[submodule "mcf_glpk/libs/extern/cxxopts"]
+	path = mcf_glpk/libs/extern/cxxopts
+	url = https://github.com/jarro2783/cxxopts
+[submodule "mcf_glpk/libs/cxxopts"]
+	path = mcf_glpk/libs/cxxopts
+	url = https://github.com/jarro2783/cxxopts

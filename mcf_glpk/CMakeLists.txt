@@ -20,6 +20,8 @@ add_subdirectory(libs/Graph)
 set(GLPK_WITH_GMP ON)
 add_subdirectory(libs/glpk)
 
+# Add cxxopts
+add_subdirectory(libs/cxxopts)
 
 # $source_files is a space-delimited list of filenames.
 add_executable(mcfglpk src/mcfglpk.cpp)
@@ -32,5 +34,7 @@ target_link_libraries(mcfglpk PRIVATE Graph)
 target_link_libraries(mcfglpk PRIVATE gmp)
 target_link_libraries(mcfglpk PRIVATE gmpxx)
 target_link_libraries(mcfglpk PRIVATE glpk-debug)
+target_include_directories(mcfglpk PUBLIC cxxopts)
+target_link_libraries(mcfglpk PUBLIC cxxopts)
 
 target_link_libraries(convert PRIVATE Graph)

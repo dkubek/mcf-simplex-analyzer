@@ -1,18 +1,19 @@
-#include <chrono>
-#include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <ratio>
 #include <string>
 #include <vector>
 
 #include <Graph.h>
+
 #define HAVE_GMP
+
 #include <glpk.h>
 
-constexpr char USAGE[] = "Usage: mcfglpk mpsfile";
+#include <string.h>
+#include <cxxopts.hpp>
+
 constexpr glp_smcp DEFAULT_GLP_SMCP = {
         .msg_lev = GLP_MSG_ALL,
         .meth = GLP_PRIMAL,
@@ -31,14 +32,27 @@ constexpr glp_smcp DEFAULT_GLP_SMCP = {
 
 
 constexpr glp_stmcp GLP_DEFAULT_STMCP = {
+        .store_mem = GLP_STORE_TRACE_MEM_OFF,
+
         .objective_trace = GLP_OBJECTIVE_TRACE_ON,
         .basis_trace = GLP_BASIS_TRACE_ON,
         .nonbasis_trace = GLP_NONBASIS_TRACE_ON,
         .complexity_trace = GLP_COMPLEXITY_TRACE_ON,
-        .pivot_rule = GLP_TRACE_PIVOT_BEST,
+        //.pivot_rule = GLP_TRACE_PIVOT_BEST,
+        .pivot_rule = GLP_TRACE_PIVOT_DANTZIG,
+
+        .info_file_basename = {'\0'},
+        .objective_values_file_basename = {'\0'},
+        .status_file_basename = {'\0'},
+        .variable_values_file_basename = {'\0'},
 };
 
-std::ostream &get_trace(std::ostream &os, const std::string &filename) {
+std::vector<std::string> get_names(glp_prob *P);
+
+void print_info(std::ostream &os, glp_prob *P);
+
+std::ostream& manual_memory_trace_example(std::ostream& os, const std::string& lp_filename) {
+    // TODO: Pretty output
     glp_prob *P;
     P = glp_create_prob();
 
@@ -47,31 +61,14 @@ std::ostream &get_trace(std::ostream &os, const std::string &filename) {
     params.msg_lev = GLP_MSG_ERR;
 
     // Read the problem from a file
-    glp_read_lp(P, NULL, filename.c_str());
+    glp_read_lp(P, NULL, lp_filename.c_str());
 
     // Construct initial basis
     glp_adv_basis(P, 0);
-    // glp_std_basis(P);
 
-    auto ncols = glp_get_num_cols(P);
-    auto nrows = glp_get_num_rows(P);
-
-    std::vector<std::string> names;
-    names.resize(1);
-    for (size_t i = 1; i <= nrows; i++) {
-        std::string name(glp_get_row_name(P, i));
-        names.push_back(name);
-    }
-
-    for (size_t j = 1; j <= ncols; j++) {
-        std::string name(glp_get_col_name(P, j));
-        names.push_back(name);
-    }
-
-    auto trace = glp_create_ssxtrace(&GLP_DEFAULT_STMCP);
-
+    auto trace_params = GLP_DEFAULT_STMCP;
+    auto trace = glp_create_ssxtrace(&trace_params);
     glp_exact_trace(P, &params, trace);
-    // glp_exact(P, &params);
 
     // Print solution
     mpz_t num, den;
@@ -89,6 +86,7 @@ std::ostream &get_trace(std::ostream &os, const std::string &filename) {
         os << value << '\t' << bits << '\n';
     }
 
+    std::vector<std::string> names = get_names(P);
     size_t start = (trace->no_iterations - 1) * trace->no_basic;
     size_t k = trace->no_basic + trace->no_nonbasic;
     os << "Number of names: " << names.size() - 1 << '\n';
@@ -142,120 +140,142 @@ std::ostream &get_trace(std::ostream &os, const std::string &filename) {
     return os;
 }
 
-std::ostream &get_basis_factorizations(std::ostream &os,
-                                       const std::string &filename) {
+
+std::ostream &get_trace(std::ostream &os, const std::string &lp_filename, const std::string &info_filename,
+                        const std::string &objective_filename, const std::string &status_filename,
+                        const std::string &variable_filename, int pivot_rule) {
     glp_prob *P;
     P = glp_create_prob();
 
     glp_smcp params = DEFAULT_GLP_SMCP;
-    params.it_lim = 1;
+    // params.it_lim = 1;
     params.msg_lev = GLP_MSG_ERR;
 
     // Read the problem from a file
-    glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
+    glp_read_lp(P, NULL, lp_filename.c_str());
+
+    if (!info_filename.empty()) {
+        std::ofstream fout{info_filename};
+        if (fout) {
+            print_info(fout, P);
+        }
+    }
 
     // Construct initial basis
     glp_adv_basis(P, 0);
-    // glp_std_basis(P);
 
-    auto ncols = glp_get_num_cols(P);
-    auto nrows = glp_get_num_rows(P);
+    auto trace_params = GLP_DEFAULT_STMCP;
+    strcpy(trace_params.status_file_basename, status_filename.c_str());
+    strcpy(trace_params.objective_values_file_basename, objective_filename.c_str());
+    strcpy(trace_params.variable_values_file_basename, variable_filename.c_str());
+    trace_params.pivot_rule = pivot_rule;
 
-    // Solve the problem step by step, day by day
-    while (glp_get_status(P) != GLP_OPT) {
-        glp_exact(P, &params);
+    auto trace = glp_create_ssxtrace(&trace_params);
 
-        if (!glp_bf_exists(P)) glp_factorize(P);
+    glp_exact_trace(P, &params, trace);
 
-        for (int i = 1; i <= nrows; i++) { os << glp_get_bhead(P, i) << ' '; }
-        os << '\n';
-    }
-
+    glp_ssxtrace_free(trace);
     glp_delete_prob(P);
+
     return os;
 }
 
-void compare_execution_time(const std::string &filename) {
-    glp_prob *P;
-    P = glp_create_prob();
-
-    glp_smcp params = DEFAULT_GLP_SMCP;
-    params.it_lim = 1;
-    params.msg_lev = GLP_MSG_ON;
-
-    // Read the problem from a file
-    glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
-
-    // Construct initial basis
-    glp_adv_basis(P, 0);
-    // glp_std_basis(P);
-
-    // Print solution
-    // glp_print_sol(P, "out.txt");
-
+void print_info(std::ostream &os, glp_prob *P) {
     auto ncols = glp_get_num_cols(P);
     auto nrows = glp_get_num_rows(P);
 
-    // if (!glp_bf_exists(P))
-    //     glp_factorize(P);
+    os << "--- START INFO ---" << '\n';
+    os << "Rows: " << nrows << '\n';
+    os << "Cols: " << ncols << '\n';
+    os << "--- END INFO ---" << '\n';
 
-    // for (int i = 1; i <= nrows; i++) {
-    //     std::cout << glp_get_bhead(P, i) << ' ';
-    // }
-    // std::cout << '\n';
-
-    // Solve the problem step by step, day by day
-    std::cout << "Computing solution iteration by iteration ...\n";
-    auto start = std::chrono::steady_clock::now();
-    while (glp_get_status(P) != GLP_OPT) { glp_exact(P, &params); }
-    auto end = std::chrono::steady_clock::now();
-    auto diff_partial = end - start;
-    std::cout << "Finished.\n";
-
-    // Solve the problem all at once
-    std::cout << "Computing all at once ...\n";
-
-    glp_read_mps(P, GLP_MPS_FILE, NULL, filename.c_str());
-    glp_adv_basis(P, 0);
-
-    start = std::chrono::steady_clock::now();
-    params.it_lim = std::numeric_limits<int>::max();
-    glp_exact(P, &params);
-    end = std::chrono::steady_clock::now();
-    auto diff_complete = end - start;
-
-    std::cout << "Finished.\n";
-
-    // Report results
-    std::cout << "STEP BY STEP:\t"
-              << std::chrono::duration<double, std::milli>(diff_partial).count()
-              << " ms" << std::endl;
-    std::cout
-            << "COMPLETE:\t"
-            << std::chrono::duration<double, std::milli>(diff_complete).count()
-            << " ms" << std::endl;
-
-    // Cleanup
-    glp_delete_prob(P);
+    os << "--- START NAMES ---" << '\n';
+    std::vector<std::string> names = get_names(P);
+    for (size_t i = 1; i < names.size(); i++)
+        os << names[i] << '\n';
+    os << "--- END NAMES ---" << '\n';
 }
 
-int main(int argc, char *argv[]) {
-    std::vector<std::string> args{argv, argv + argc};
+std::vector<std::string> get_names(glp_prob *P) {
+    auto ncols = glp_get_num_cols(P);
+    auto nrows = glp_get_num_rows(P);
 
-    if (args.size() != 2) {
-        std::cerr << USAGE << '\n';
+    std::vector<std::string> names;
+    names.resize(1);
+    for (size_t i = 1; i <= nrows; i++) {
+        std::string name(glp_get_row_name(P, i));
+        names.push_back(name);
+    }
+
+    for (size_t j = 1; j <= ncols; j++) {
+        std::string name(glp_get_col_name(P, j));
+        names.push_back(name);
+    }
+
+    return names;
+}
+
+
+int main(int argc, char *argv[]) {
+    cxxopts::Options options("mcfglpk", "Compute trace statistics from exact simplex.");
+
+    options.add_options()
+            ("lp-file", "Linear programming problem in LP format", cxxopts::value<std::string>())
+            ("pivot", "Pivoting rule to use. Available : dantzig, best", cxxopts::value<std::string>())
+            ("info-file", "Info file name", cxxopts::value<std::string>())
+            ("obj-file", "Objective values file name", cxxopts::value<std::string>())
+            ("status-file", "Status file name", cxxopts::value<std::string>())
+            ("var-file", "Variables file name", cxxopts::value<std::string>())
+            ("h,help", "Print usage");
+    options.parse_positional({"lp-file"});
+    auto result = options.parse(argc, argv);
+
+    if (result.count("help")) {
+        std::cout << options.help() << std::endl;
+        exit(0);
+    }
+
+    std::string lp_file;
+    std::string info_filename;
+    std::string objective_filename;
+    std::string status_filename;
+    std::string variable_filename;
+    if (result.count("lp-file"))
+        lp_file = result["lp-file"].as<std::string>();
+    if (result.count("info-file"))
+        info_filename = result["info-file"].as<std::string>();
+    if (result.count("obj-file"))
+        objective_filename = result["obj-file"].as<std::string>();
+    if (result.count("status-file"))
+        status_filename = result["status-file"].as<std::string>();
+    if (result.count("var-file"))
+        variable_filename = result["var-file"].as<std::string>();
+
+    int pivot_rule;
+    if (!result.count("pivot")) {
+        std::cerr << "Need to specify pivoting rule!" << '\n';
         return EXIT_FAILURE;
     }
 
-    // compare_execution_time(args[1]);
-    //{
-    //     std::ofstream fout{"basis_factorizations.txt"};
-    //     get_basis_factorizations(fout, args[1]);
-    // }
-    {
-        std::ofstream fout{"basis_values.txt"};
-        get_trace(std::cout, args[1]);
+    auto pivot_rule_name = result["pivot"].as<std::string>();
+    if (pivot_rule_name == "dantzig") {
+        pivot_rule = GLP_TRACE_PIVOT_DANTZIG;
     }
+    else if ( pivot_rule_name == "best" ) {
+        pivot_rule = GLP_TRACE_PIVOT_BEST;
+    }
+    else  {
+        std::cerr << "Unknown pivoting rule: " << pivot_rule_name << " !" << '\n';
+        return EXIT_FAILURE;
+    }
+
+    get_trace(std::cout,
+              lp_file,
+              info_filename,
+              objective_filename,
+              status_filename,
+              variable_filename,
+              pivot_rule);
 
     return EXIT_SUCCESS;
 }
